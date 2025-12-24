@@ -247,8 +247,8 @@
     <div class="conn-toggle" id="connToggle">⚙️ Connection Settings</div>
     <div class="conn-panel" id="connPanel">
       <div class="conn-inner">
-        <input id="wsUrl" placeholder="wss://your-server.herokuapp.com" />
-        <input id="token" placeholder="Token (if required)" />
+        <input id="wsUrl" placeholder="wss://obs-control-aaron.herokuapp.com" />
+        <input id="token" placeholder="Token (default: elias123)" />
         <div class="grid2">
           <button class="btn primary" id="connectBtn">Connect</button>
           <button class="btn ghost" id="disconnectBtn">Disconnect</button>
@@ -271,6 +271,10 @@
 (() => {
   const $ = id => document.getElementById(id);
   
+  // ========== CONFIG ==========
+  // Default token when served from the server (matches OBS_REMOTE_TOKEN env var)
+  const DEFAULT_TOKEN = "elias123";
+  
   // ========== State ==========
   const state = {
     ws: null,
@@ -281,13 +285,21 @@
   const SETTINGS_KEY = "obs_remote_v2";
 
   // ========== Auto-detect WebSocket URL ==========
+  function isOnServer() {
+    return location.protocol !== "file:" && location.hostname !== "localhost";
+  }
+  
   function getAutoWsUrl() {
-    // If served from a server (not localhost, not file://), use same host
-    if (location.protocol !== "file:" && location.hostname !== "localhost") {
+    if (isOnServer()) {
       const protocol = location.protocol === "https:" ? "wss:" : "ws:";
       return `${protocol}//${location.host}`;
     }
     return null; // Need manual config
+  }
+  
+  function getDefaultToken() {
+    // Use default token when on server, otherwise use saved or empty
+    return isOnServer() ? DEFAULT_TOKEN : "";
   }
 
   // ========== UI Helpers ==========
@@ -489,9 +501,12 @@
   // Auto-connect if on server
   const autoUrl = getAutoWsUrl();
   if (autoUrl) {
-    // Try auto-connect with saved token
-    const savedToken = $("token").value.trim();
-    connect(autoUrl, savedToken);
+    // Use saved token or default token
+    const token = $("token").value.trim() || getDefaultToken();
+    if (!$("token").value.trim() && token) {
+      $("token").value = token; // Show default in input
+    }
+    connect(autoUrl, token);
   } else {
     setStatus(false, "Manual");
     $("connPanel").classList.add("open");
