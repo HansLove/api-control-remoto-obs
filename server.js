@@ -4,7 +4,6 @@
  * - Optional REST triggers
  * - Simple token auth
  * - Event logging to ./logs (JSONL)
- *
  * Local:
  *   npm install
  *   node server.js
@@ -49,7 +48,6 @@ function appendLog(event) {
   fs.appendFile(file, JSON.stringify(event) + "\n", () => {});
 }
 
-// ---------- Express app (optional web + REST) ----------
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
@@ -185,6 +183,7 @@ wss.on("connection", (ws, req) => {
       ws.send(JSON.stringify({ type: "ack", ok: false, message: "Missing type" }));
       return;
     }
+
 
     const enriched = {
       ...msg,
