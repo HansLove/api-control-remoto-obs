@@ -742,7 +742,11 @@
   // ============================
   // WebSocket connect
   // ============================
+  let authFailed = false; // track if auth failed to stop reconnect loop
+
   function connect(){
+    if(authFailed) return; // don't retry if auth failed
+    
     try{
       if(ws) ws.close();
       ws = new WebSocket(WS_URL);
@@ -750,6 +754,7 @@
 
       ws.onopen = () => {
         connected = true;
+        authFailed = false;
         setConn("ok", "Connected");
         pushToast("Overlay connected", "good", 1200);
         // set defaults
@@ -757,8 +762,16 @@
         setSpoiler(spoiler);
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         connected = false;
+        // Code 1008 = Policy Violation (unauthorized)
+        if(ev.code === 1008){
+          authFailed = true;
+          setConn("bad", "Auth Failed");
+          pushToast("Token missing or invalid", "bad", 5000);
+          console.error("WebSocket auth failed. Add ?token=YOUR_TOKEN to the URL");
+          return; // don't retry
+        }
         setConn("bad", "Disconnected");
         pushToast("Overlay disconnected", "bad", 1200);
         // retry
@@ -768,7 +781,7 @@
       ws.onerror = () => {
         connected = false;
         setConn("bad", "Error");
-        scheduleReconnect();
+        if(!authFailed) scheduleReconnect();
       };
 
       ws.onmessage = (ev) => {
