@@ -400,12 +400,7 @@
     <!-- Toasts -->
     <div class="toasts minimalHide" id="toasts"></div>
 
-    <!-- Audio assets (optional, can be replaced with your own paths) -->
-    <audio id="sfx-applause" preload="auto"></audio>
-    <audio id="sfx-boo" preload="auto"></audio>
-    <audio id="sfx-ding" preload="auto"></audio>
-    <audio id="sfx-woosh" preload="auto"></audio>
-
+    <!-- Audio: Now using Web Audio API (no external files needed) -->
   </div>
 
 <script>
@@ -427,15 +422,7 @@
   const WS_URL = wsBase + (wsBase.includes("?") ? "&" : "?") + "role=" + encodeURIComponent(role) +
                  (token ? "&token=" + encodeURIComponent(token) : "");
 
-  // Optional: map sfx IDs to actual audio files
-  // Put your audio files in the same folder or served path:
-  // public/sfx/applause.mp3, boo.mp3, ding.mp3, woosh.mp3
-  const SFX_FILES = {
-    applause: q.get("sfx_applause") || "sfx/applause.mp3",
-    boo:      q.get("sfx_boo")      || "sfx/boo.mp3",
-    ding:     q.get("sfx_ding")     || "sfx/ding.mp3",
-    woosh:    q.get("sfx_woosh")    || "sfx/woosh.mp3",
-  };
+  // Audio: Using Web Audio API for synthetic sounds (no external files needed)
 
   // ============================
   // DOM
@@ -462,18 +449,14 @@
   const seqLabel = $("seqLabel");
   const seqBar = $("seqBar");
 
-  // audio elements
-  const sfxEl = {
-    applause: $("sfx-applause"),
-    boo: $("sfx-boo"),
-    ding: $("sfx-ding"),
-    woosh: $("sfx-woosh"),
-  };
-
-  // attach sources
-  Object.keys(SFX_FILES).forEach((k) => {
-    if (sfxEl[k]) sfxEl[k].src = SFX_FILES[k];
-  });
+  // Web Audio API context (created on first user interaction)
+  let audioCtx = null;
+  function getAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtx;
+  }
 
   // ============================
   // STATE
@@ -637,20 +620,103 @@
   }
 
   // ============================
-  // Audio
+  // Audio (Web Audio API - synthetic sounds)
   // ============================
-  async function playSfx(id, volume=0.6){
-    const el = sfxEl[id];
-    if(!el) return;
-
-    try{
-      el.pause();
-      el.currentTime = 0;
-      el.volume = Math.max(0, Math.min(1, Number(volume)));
-      await el.play();
-    }catch(e){
-      // In OBS Browser Source, autoplay policies vary. If blocked, it will fail silently.
-      // You can enable "Control audio via OBS" and make sure Browser Source isn't muted.
+  function playSfx(id, volume = 0.6) {
+    try {
+      const ctx = getAudioContext();
+      if (ctx.state === "suspended") ctx.resume();
+      
+      const gain = ctx.createGain();
+      gain.connect(ctx.destination);
+      gain.gain.value = Math.max(0, Math.min(1, volume));
+      
+      const now = ctx.currentTime;
+      
+      switch(id) {
+        case "applause": {
+          // Multiple overlapping noise bursts for applause effect
+          for (let i = 0; i < 8; i++) {
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.type = "sawtooth";
+            osc.frequency.value = 100 + Math.random() * 200;
+            g.gain.setValueAtTime(volume * 0.15, now + i * 0.05);
+            g.gain.exponentialDecayTo = 0.001;
+            g.gain.setTargetAtTime(0.001, now + i * 0.05 + 0.1, 0.1);
+            osc.connect(g).connect(ctx.destination);
+            osc.start(now + i * 0.05);
+            osc.stop(now + 0.6);
+          }
+          break;
+        }
+        case "boo": {
+          // Low descending tone
+          const osc = ctx.createOscillator();
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(200, now);
+          osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
+          gain.gain.setValueAtTime(volume * 0.4, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+          osc.connect(gain);
+          osc.start(now);
+          osc.stop(now + 0.5);
+          break;
+        }
+        case "ding": {
+          // Pleasant bell-like ding
+          const osc = ctx.createOscillator();
+          const osc2 = ctx.createOscillator();
+          osc.type = "sine";
+          osc2.type = "sine";
+          osc.frequency.value = 880; // A5
+          osc2.frequency.value = 1320; // E6
+          gain.gain.setValueAtTime(volume * 0.5, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+          osc.connect(gain);
+          osc2.connect(gain);
+          osc.start(now);
+          osc2.start(now);
+          osc.stop(now + 0.8);
+          osc2.stop(now + 0.8);
+          break;
+        }
+        case "woosh": {
+          // Noise sweep for woosh
+          const bufferSize = ctx.sampleRate * 0.3;
+          const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+          }
+          const noise = ctx.createBufferSource();
+          noise.buffer = buffer;
+          const filter = ctx.createBiquadFilter();
+          filter.type = "bandpass";
+          filter.frequency.setValueAtTime(500, now);
+          filter.frequency.exponentialRampToValueAtTime(2000, now + 0.15);
+          filter.frequency.exponentialRampToValueAtTime(500, now + 0.3);
+          filter.Q.value = 2;
+          gain.gain.setValueAtTime(volume * 0.6, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+          noise.connect(filter).connect(gain);
+          noise.start(now);
+          break;
+        }
+        default:
+          // Generic beep
+          const osc = ctx.createOscillator();
+          osc.type = "sine";
+          osc.frequency.value = 440;
+          gain.gain.setValueAtTime(volume * 0.3, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+          osc.connect(gain);
+          osc.start(now);
+          osc.stop(now + 0.2);
+      }
+    } catch(e) {
+      // Audio may fail in some OBS Browser Source configurations
+      console.warn("SFX failed:", e);
     }
   }
 
