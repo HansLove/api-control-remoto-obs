@@ -3,981 +3,499 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>OBS Remote Control</title>
+  <title>OBS Remote</title>
   <style>
     :root{
-      --bg:#0b0f16;
-      --panel:#121a26;
-      --panel2:#0f1622;
-      --text:#e7eefc;
-      --muted:#9fb0cc;
+      --bg:#0a0e14;
+      --surface:rgba(18,26,38,.72);
+      --text:#eaf1ff;
+      --muted:#7a8ba8;
       --border:rgba(255,255,255,.08);
       --good:#27d17f;
       --warn:#f6c34a;
       --bad:#ff4d6d;
       --accent:#6aa9ff;
-      --shadow: 0 10px 30px rgba(0,0,0,.35);
-      --radius: 18px;
+      --shadow: 0 8px 24px rgba(0,0,0,.4);
+      --radius: 16px;
     }
-    *{box-sizing:border-box}
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+    html,body{margin:0;height:100%;}
     body{
-      margin:0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
-      background: radial-gradient(1200px 800px at 30% -10%, rgba(106,169,255,.18), transparent 55%),
-                  radial-gradient(900px 600px at 110% 10%, rgba(39,209,127,.12), transparent 60%),
-                  var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
       color:var(--text);
-      padding: 14px;
-      padding-bottom: 84px; /* room for bottom dock */
+      padding: 12px;
+      padding-bottom: 88px;
+      overflow-x:hidden;
     }
-    .wrap{
-      max-width: 520px;
-      margin: 0 auto;
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-    }
+    .wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:10px;}
+    
+    /* Header */
     header{
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      background: linear-gradient(to bottom, rgba(11,15,22,.92), rgba(11,15,22,.65));
-      backdrop-filter: blur(10px);
-      padding: 10px 0 8px;
-    }
-    .titleRow{
-      display:flex;
-      align-items:flex-end;
-      justify-content:space-between;
-      gap:10px;
-      padding: 0 2px 8px;
-    }
-    .title{
-      font-size: 18px;
-      font-weight: 750;
-      letter-spacing:.2px;
-      margin:0;
-    }
-    .sub{
-      font-size: 12px;
-      color:var(--muted);
-      margin-top:3px;
-    }
-    .statusPill{
       display:flex;
       align-items:center;
-      gap:8px;
-      padding: 8px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: rgba(18,26,38,.65);
-      box-shadow: var(--shadow);
-      user-select:none;
-      white-space:nowrap;
+      justify-content:space-between;
+      padding:8px 4px 12px;
+      border-bottom:1px solid var(--border);
+      margin-bottom:4px;
     }
-    .dot{
-      width:10px;height:10px;border-radius:50%;
-      background: var(--warn);
-      box-shadow: 0 0 0 3px rgba(246,195,74,.14);
+    .logo{font-size:15px;font-weight:800;letter-spacing:.3px;}
+    .status{
+      display:flex;align-items:center;gap:6px;
+      font-size:11px;font-weight:600;color:var(--muted);
     }
-    .dot.ok{
-      background: var(--good);
-      box-shadow: 0 0 0 3px rgba(39,209,127,.14);
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);}
+    .dot.ok{background:var(--good);}
+    .dot.bad{background:var(--bad);}
+
+    /* Cards */
+    .card{
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:12px;
+      backdrop-filter:blur(8px);
     }
-    .dot.bad{
-      background: var(--bad);
-      box-shadow: 0 0 0 3px rgba(255,77,109,.14);
-    }
-    .pillText{
-      font-size: 12px;
-      color: var(--text);
-      opacity:.95;
+    .card-title{
+      font-size:11px;
+      font-weight:700;
+      color:var(--muted);
+      text-transform:uppercase;
+      letter-spacing:.5px;
+      margin-bottom:10px;
     }
 
-    .card{
-      border: 1px solid var(--border);
-      background: rgba(18,26,38,.72);
-      border-radius: var(--radius);
-      padding: 12px;
-      box-shadow: var(--shadow);
-    }
-    .row{
-      display:flex;
-      gap:10px;
-      align-items:center;
-    }
-    .row > * { flex: 1; }
-    label{
-      display:block;
-      font-size: 11px;
-      color: var(--muted);
-      margin-bottom: 6px;
-    }
-    input, select, textarea{
-      width:100%;
-      padding: 12px 12px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: rgba(15,22,34,.75);
-      color: var(--text);
-      outline:none;
-      font-size: 14px;
-    }
-    textarea{ min-height: 84px; resize: vertical; }
-    input::placeholder, textarea::placeholder{ color: rgba(159,176,204,.65) }
+    /* Buttons */
     .btn{
       width:100%;
-      padding: 12px 12px;
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      background: rgba(15,22,34,.8);
-      color: var(--text);
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing:.2px;
+      padding:14px 12px;
+      border-radius:14px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      font-size:14px;
+      font-weight:700;
       cursor:pointer;
-      user-select:none;
-      transition: transform .06s ease, border-color .2s ease, background .2s ease;
-      -webkit-tap-highlight-color: transparent;
+      transition:transform .05s,background .15s;
     }
-    .btn:active{ transform: scale(.98) }
-    .btn.primary{
-      background: linear-gradient(135deg, rgba(106,169,255,.28), rgba(106,169,255,.12));
-      border-color: rgba(106,169,255,.35);
+    .btn:active{transform:scale(.97);}
+    .btn.primary{background:rgba(106,169,255,.18);border-color:rgba(106,169,255,.3);}
+    .btn.good{background:rgba(39,209,127,.15);border-color:rgba(39,209,127,.25);}
+    .btn.bad{background:rgba(255,77,109,.15);border-color:rgba(255,77,109,.25);}
+    .btn.warn{background:rgba(246,195,74,.15);border-color:rgba(246,195,74,.25);}
+    .btn.ghost{background:transparent;}
+
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+    .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+
+    /* Quick Toast Input */
+    .toast-row{display:flex;gap:8px;}
+    .toast-row input{
+      flex:1;
+      padding:12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      font-size:14px;
+      outline:none;
     }
-    .btn.good{
-      background: linear-gradient(135deg, rgba(39,209,127,.22), rgba(39,209,127,.10));
-      border-color: rgba(39,209,127,.30);
-    }
-    .btn.bad{
-      background: linear-gradient(135deg, rgba(255,77,109,.22), rgba(255,77,109,.10));
-      border-color: rgba(255,77,109,.30);
-    }
-    .btn.warn{
-      background: linear-gradient(135deg, rgba(246,195,74,.24), rgba(246,195,74,.10));
-      border-color: rgba(246,195,74,.30);
-    }
-    .btn.ghost{
-      background: rgba(15,22,34,.35);
-    }
-    .btn.small{
-      padding: 10px 10px;
-      font-size: 13px;
-      border-radius: 14px;
-    }
-    .grid{
-      display:grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap:10px;
-    }
-    .grid3{
-      display:grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap:10px;
-    }
-    .sectionTitle{
+    .toast-row input::placeholder{color:var(--muted);}
+    .toast-row .btn{width:auto;padding:12px 16px;}
+
+    /* Sequence display */
+    .seq-display{
       display:flex;
-      align-items:baseline;
-      justify-content:space-between;
+      align-items:center;
       gap:10px;
-      margin: 2px 0 10px;
+      padding:10px 12px;
+      background:rgba(0,0,0,.2);
+      border-radius:12px;
+      margin-bottom:10px;
     }
-    .sectionTitle h2{
-      margin:0;
-      font-size: 14px;
-      letter-spacing:.2px;
+    .seq-num{font-size:28px;font-weight:900;color:var(--accent);}
+    .seq-info{flex:1;}
+    .seq-name{font-size:12px;color:var(--muted);font-weight:600;}
+    .seq-label{font-size:13px;font-weight:600;margin-top:2px;}
+
+    /* Connection panel (collapsible) */
+    .conn-panel{
+      overflow:hidden;
+      max-height:0;
+      transition:max-height .2s ease;
     }
-    .hint{
-      font-size: 11px;
-      color: var(--muted);
-      margin: 6px 0 0;
-      line-height: 1.35;
-    }
-    .chips{
-      display:flex;
-      flex-wrap:wrap;
-      gap:8px;
-    }
-    .chip{
-      padding: 8px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--border);
-      background: rgba(15,22,34,.45);
-      color: var(--text);
-      font-size: 12px;
+    .conn-panel.open{max-height:200px;}
+    .conn-toggle{
+      font-size:11px;
+      color:var(--muted);
       cursor:pointer;
-      user-select:none;
-      -webkit-tap-highlight-color: transparent;
+      text-align:center;
+      padding:8px;
     }
-    .chip.active{
-      border-color: rgba(106,169,255,.45);
-      background: rgba(106,169,255,.16);
+    .conn-inner{padding:10px 0;}
+    .conn-inner input{
+      width:100%;
+      padding:10px;
+      border-radius:10px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.04);
+      color:var(--text);
+      font-size:13px;
+      outline:none;
+      margin-bottom:8px;
     }
+    .conn-inner .grid2{margin-top:4px;}
 
     /* Bottom dock */
     .dock{
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
-      padding: 10px 14px 14px;
-      background: linear-gradient(to top, rgba(11,15,22,.96), rgba(11,15,22,.55));
-      backdrop-filter: blur(10px);
-      border-top: 1px solid rgba(255,255,255,.06);
-      z-index: 20;
+      position:fixed;
+      left:0;right:0;bottom:0;
+      padding:10px 12px 16px;
+      background:linear-gradient(to top,rgba(10,14,20,.98),rgba(10,14,20,.7));
+      backdrop-filter:blur(10px);
+      border-top:1px solid var(--border);
     }
-    .dockInner{
-      max-width:520px;
-      margin:0 auto;
-      display:flex;
-      gap:10px;
-    }
-    .dockInner .btn{ border-radius: 18px; }
-    .toast{
-      position: fixed;
-      left: 50%;
-      transform: translateX(-50%);
-      bottom: 92px;
-      width: min(520px, calc(100% - 28px));
-      padding: 12px 12px;
-      border-radius: 16px;
-      border: 1px solid var(--border);
-      background: rgba(18,26,38,.92);
-      box-shadow: var(--shadow);
-      z-index: 30;
-      display:none;
-    }
-    .toast.show{ display:block; }
-    .toast b{ font-size: 13px; }
-    .toast div{ font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .dock-inner{max-width:480px;margin:0 auto;display:flex;gap:8px;}
+    .dock-inner .btn{flex:1;padding:16px 12px;font-size:15px;border-radius:16px;}
 
-    .miniRow{
-      display:flex; gap:10px; align-items:center;
+    /* Toast notification */
+    .ui-toast{
+      position:fixed;
+      left:50%;bottom:100px;
+      transform:translateX(-50%);
+      padding:10px 16px;
+      background:rgba(18,26,38,.95);
+      border:1px solid var(--border);
+      border-radius:12px;
+      font-size:13px;
+      font-weight:600;
+      opacity:0;
+      transition:opacity .15s;
+      pointer-events:none;
+      z-index:100;
     }
-    .miniRow .btn{ flex: 1; }
+    .ui-toast.show{opacity:1;}
 
-    @media (max-width: 360px){
-      .grid{ grid-template-columns: 1fr; }
-      .grid3{ grid-template-columns: 1fr; }
+    @media(max-width:360px){
+      .grid2,.grid3{grid-template-columns:1fr;}
     }
   </style>
 </head>
-
 <body>
-  <header>
-    <div class="wrap">
-      <div class="titleRow">
-        <div>
-          <p class="title">OBS Remote Control</p>
-          <div class="sub">Mobile-first control surface for overlays (toasts, markers, sequences).</div>
-        </div>
-        <div class="statusPill" id="statusPill" title="WebSocket status">
-          <span class="dot" id="statusDot"></span>
-          <span class="pillText" id="statusText">Disconnected</span>
-        </div>
-      </div>
-    </div>
-  </header>
-
   <div class="wrap">
-
-    <!-- Connection -->
-    <div class="card">
-      <div class="sectionTitle">
-        <h2>Connection</h2>
-        <div class="hint" id="nowTime"></div>
+    <header>
+      <div class="logo">📡 OBS Remote</div>
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <span id="statusText">Connecting…</span>
       </div>
-
-      <div class="row">
-        <div>
-          <label>WebSocket URL</label>
-          <input id="wsUrl" placeholder="wss://tu-app.herokuapp.com" />
-        </div>
-        <div>
-          <label>Token (optional)</label>
-          <input id="token" placeholder="abc123" />
-        </div>
-      </div>
-
-      <div style="height:10px"></div>
-
-      <div class="row">
-        <button class="btn primary" id="connectBtn">Connect</button>
-        <button class="btn ghost" id="disconnectBtn">Disconnect</button>
-      </div>
-
-      <div class="hint">
-        Tip: Para Heroku usa <b>wss://tu-app.herokuapp.com</b>. Local usa <b>ws://localhost:3000</b> o <b>ws://IP_LOCAL:3000</b>.
-      </div>
-    </div>
-
-    <!-- Presets -->
-    <div class="card">
-      <div class="sectionTitle">
-        <h2>Control Preset</h2>
-        <div class="hint">Switch button layouts quickly.</div>
-      </div>
-
-      <div class="chips" id="presetChips">
-        <div class="chip active" data-preset="standard">Standard</div>
-        <div class="chip" data-preset="editing">Editing</div>
-        <div class="chip" data-preset="top5">Top 5</div>
-      </div>
-
-      <div style="height:10px"></div>
-
-      <div class="row">
-        <div>
-          <label>Operator Name (optional)</label>
-          <input id="operator" placeholder="Hans / Aaron / Editor" />
-        </div>
-        <div>
-          <label>Channel / Show</label>
-          <input id="show" placeholder="Cine Stream" />
-        </div>
-      </div>
-
-      <div class="hint">Operator/show is attached to every event (for logs and multi-operator setups).</div>
-    </div>
+    </header>
 
     <!-- Quick Toast -->
-    <div class="card" id="toastCard">
-      <div class="sectionTitle">
-        <h2>Toast / Notification</h2>
-        <div class="hint">Instant overlay message</div>
-      </div>
-
-      <label>Message</label>
-      <input id="toastMsg" placeholder="e.g. 🔥 Chat is on fire / New topic / Great point" />
-
-      <div style="height:10px"></div>
-
-      <div class="row">
-        <div>
-          <label>Type</label>
-          <select id="toastType">
-            <option value="info">Info</option>
-            <option value="good">Good</option>
-            <option value="warn">Warn</option>
-            <option value="bad">Bad</option>
-          </select>
-        </div>
-        <div>
-          <label>Duration (ms)</label>
-          <input id="toastDur" type="number" min="500" step="250" value="2200" />
-        </div>
-      </div>
-
-      <div style="height:10px"></div>
-
-      <div class="grid">
-        <button class="btn primary" id="sendToast">Send Toast</button>
-        <button class="btn ghost" id="clearToast">Clear Toast</button>
+    <div class="card">
+      <div class="card-title">💬 Quick Message</div>
+      <div class="toast-row">
+        <input id="toastMsg" placeholder="Type a message…" />
+        <button class="btn primary" id="sendToast">Send</button>
       </div>
     </div>
 
-    <!-- MARKERS -->
-    <div class="card" id="markersCard">
-      <div class="sectionTitle">
-        <h2>Markers (repeatable)</h2>
-        <div class="hint">Every click creates a timestamped marker.</div>
+    <!-- Markers -->
+    <div class="card">
+      <div class="card-title">🎬 Markers</div>
+      <div class="grid2">
+        <button class="btn good" data-trigger="applause">👏 Applause</button>
+        <button class="btn bad" data-trigger="disagree">❌ Disagree</button>
+        <button class="btn warn" data-trigger="wtf">😳 WTF</button>
+        <button class="btn primary" data-trigger="highlight">🔥 Highlight</button>
       </div>
-
-      <div class="grid">
-        <button class="btn good" data-trigger="applause" data-label="👏 Applause">👏 Applause</button>
-        <button class="btn bad" data-trigger="disagree" data-label="❌ Disagree">❌ Disagree</button>
-        <button class="btn warn" data-trigger="wtf" data-label="😳 WTF Moment">😳 WTF Moment</button>
-        <button class="btn primary" data-trigger="highlight" data-label="🔥 Highlight">🔥 Highlight</button>
-      </div>
-
-      <div style="height:10px"></div>
-
-      <div class="grid">
-        <button class="btn ghost" data-trigger="keypoint" data-label="🧠 Key Point">🧠 Key Point</button>
-        <button class="btn ghost" data-trigger="funny" data-label="😂 Funny">😂 Funny</button>
-        <button class="btn ghost" data-trigger="next_segment" data-label="⏭️ Next Segment">⏭️ Next Segment</button>
-        <button class="btn ghost" data-trigger="start_talking" data-label="🎙️ Start Talking">🎙️ Start Talking</button>
-      </div>
-
-      <div class="hint">
-        These are great for editors: you can export the log and cut directly from markers.
+      <div style="height:8px"></div>
+      <div class="grid2">
+        <button class="btn ghost" data-trigger="keypoint">🧠 Key Point</button>
+        <button class="btn ghost" data-trigger="funny">😂 Funny</button>
       </div>
     </div>
 
-    <!-- SEQUENCES -->
-    <div class="card" id="sequencesCard">
-      <div class="sectionTitle">
-        <h2>Sequences (stateful)</h2>
-        <div class="hint">Click advances step: Top 5, 3 Actors, 3 Reasons, etc.</div>
-      </div>
-
-      <div class="row">
-        <div>
-          <label>Active Sequence</label>
-          <select id="seqName">
-            <option value="top5">Top 5 Countdown</option>
-            <option value="actors3">3 Actors</option>
-            <option value="reasons3">3 Reasons</option>
-          </select>
-        </div>
-        <div>
-          <label>Auto Reset</label>
-          <select id="seqAutoReset">
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </select>
+    <!-- Sequences -->
+    <div class="card">
+      <div class="card-title">📊 Sequence</div>
+      <div class="seq-display">
+        <div class="seq-num" id="seqNum">—</div>
+        <div class="seq-info">
+          <div class="seq-name" id="seqName">TOP 5</div>
+          <div class="seq-label" id="seqLabel">Click Next to start</div>
         </div>
       </div>
-
-      <div style="height:10px"></div>
-
-      <div class="row">
-        <div>
-          <label>Sequence Label (optional)</label>
-          <input id="seqLabel" placeholder='e.g. "Top 5 Movies of 2025"' />
-        </div>
-      </div>
-
-      <div style="height:10px"></div>
-
-      <div class="miniRow">
-        <button class="btn primary" id="seqNext">▶ Next Step</button>
+      <div class="grid3">
+        <button class="btn primary" id="seqNext">▶ Next</button>
         <button class="btn ghost" id="seqBack">↩ Back</button>
         <button class="btn ghost" id="seqReset">⟲ Reset</button>
       </div>
-
-      <div style="height:10px"></div>
-
-      <div class="hint" id="seqStateHint">State: —</div>
     </div>
 
-    <!-- SPOILER / MODE -->
-    <div class="card" id="modesCard">
-      <div class="sectionTitle">
-        <h2>Show Modes</h2>
-        <div class="hint">Persistent badges/labels in overlay.</div>
-      </div>
-
+    <!-- Spoiler Modes -->
+    <div class="card">
+      <div class="card-title">⚠️ Spoiler Level</div>
       <div class="grid3">
-        <button class="btn ghost" data-mode="cinema">🎞 Cinema</button>
-        <button class="btn ghost" data-mode="analysis">🧩 Analysis</button>
-        <button class="btn ghost" data-mode="minimal">🫥 Minimal</button>
+        <button class="btn good" data-spoiler="safe">🔒 Safe</button>
+        <button class="btn warn" data-spoiler="light">⚠️ Light</button>
+        <button class="btn bad" data-spoiler="full">☠️ Full</button>
       </div>
-
-      <div style="height:10px"></div>
-
-      <div class="grid3">
-        <button class="btn good" data-spoiler="safe">🔒 Spoiler Safe</button>
-        <button class="btn warn" data-spoiler="light">⚠️ Light Spoilers</button>
-        <button class="btn bad" data-spoiler="full">☠️ Full Spoilers</button>
-      </div>
-
-      <div class="hint">Overlay decides how to render modes/spoiler badges.</div>
     </div>
 
-    <!-- SFX -->
-    <div class="card" id="sfxCard">
-      <div class="sectionTitle">
-        <h2>SFX (optional)</h2>
-        <div class="hint">Overlay plays sound if allowed by OBS browser source.</div>
-      </div>
-
-      <div class="grid">
-        <button class="btn good" data-sfx="applause">👏 Play Applause</button>
-        <button class="btn bad" data-sfx="boo">👎 Play Boo</button>
-        <button class="btn warn" data-sfx="ding">🔔 Play Ding</button>
-        <button class="btn ghost" data-sfx="woosh">💨 Play Woosh</button>
-      </div>
-
-      <div style="height:10px"></div>
-
-      <div class="row">
-        <div>
-          <label>Volume (0–1)</label>
-          <input id="sfxVol" type="number" min="0" max="1" step="0.05" value="0.6" />
-        </div>
-        <div>
-          <label>Global SFX Toggle</label>
-          <select id="sfxEnabled">
-            <option value="true">Enabled</option>
-            <option value="false">Disabled</option>
-          </select>
+    <!-- Connection Settings (collapsed by default) -->
+    <div class="conn-toggle" id="connToggle">⚙️ Connection Settings</div>
+    <div class="conn-panel" id="connPanel">
+      <div class="conn-inner">
+        <input id="wsUrl" placeholder="wss://your-server.herokuapp.com" />
+        <input id="token" placeholder="Token (if required)" />
+        <div class="grid2">
+          <button class="btn primary" id="connectBtn">Connect</button>
+          <button class="btn ghost" id="disconnectBtn">Disconnect</button>
         </div>
       </div>
     </div>
-
-    <!-- LOGS -->
-    <div class="card" id="logsCard">
-      <div class="sectionTitle">
-        <h2>Local Log</h2>
-        <div class="hint">Saved on your phone (export anytime).</div>
-      </div>
-
-      <div class="grid">
-        <button class="btn ghost" id="copyLog">📋 Copy Log (JSON)</button>
-        <button class="btn ghost" id="downloadLog">⬇️ Download Log (JSON)</button>
-      </div>
-
-      <div style="height:10px"></div>
-
-      <button class="btn bad" id="clearLog">🧨 Clear Local Log</button>
-
-      <div class="hint" id="logCountHint">0 events logged.</div>
-    </div>
-
   </div>
 
-  <!-- bottom dock -->
+  <!-- Bottom Dock -->
   <div class="dock">
-    <div class="dockInner">
+    <div class="dock-inner">
       <button class="btn primary" id="bigHighlight">🔥 Highlight</button>
-      <button class="btn warn" id="bigNext">⏭️ Next Segment</button>
-      <button class="btn ghost" id="bigToast">💬 Quick Toast</button>
+      <button class="btn warn" id="bigNext">⏭️ Next</button>
     </div>
   </div>
 
-  <div class="toast" id="uiToast">
-    <b id="uiToastTitle">Sent</b>
-    <div id="uiToastBody">—</div>
-  </div>
+  <div class="ui-toast" id="toast"></div>
 
 <script>
 (() => {
-  // -------------------------
-  // State
-  // -------------------------
-  const $ = (id) => document.getElementById(id);
-
+  const $ = id => document.getElementById(id);
+  
+  // ========== State ==========
   const state = {
     ws: null,
     connected: false,
-    preset: "standard",
-    seq: {
-      name: "top5",
-      step: 0, // 0..N
-      max: 5,
-      label: "",
-      autoReset: true
-    },
-    localLog: []
+    seq: { name: "top5", step: 0, max: 5, label: "" }
   };
+  
+  const SETTINGS_KEY = "obs_remote_v2";
 
-  const STORAGE_KEY = "obs_remote_log_v1";
-  const SETTINGS_KEY = "obs_remote_settings_v1";
-
-  // -------------------------
-  // Helpers
-  // -------------------------
-  const nowISO = () => new Date().toISOString();
-  const nowShort = () => new Date().toLocaleTimeString([], {hour:"2-digit", minute:"2-digit", second:"2-digit"});
-
-  function uiToast(title, body, ms=1800){
-    const el = $("uiToast");
-    $("uiToastTitle").textContent = title;
-    $("uiToastBody").textContent = body || "";
-    el.classList.add("show");
-    clearTimeout(uiToast._t);
-    uiToast._t = setTimeout(() => el.classList.remove("show"), ms);
-  }
-
-  function setStatus(kind, text){
-    const dot = $("statusDot");
-    const label = $("statusText");
-    dot.classList.remove("ok","bad");
-    if(kind === "ok") dot.classList.add("ok");
-    if(kind === "bad") dot.classList.add("bad");
-    label.textContent = text;
-  }
-
-  function loadLocal(){
-    try{
-      const log = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-      if(Array.isArray(log)) state.localLog = log;
-    } catch {}
-    try{
-      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
-      if(s.wsUrl) $("wsUrl").value = s.wsUrl;
-      if(s.token) $("token").value = s.token;
-      if(s.operator) $("operator").value = s.operator;
-      if(s.show) $("show").value = s.show;
-      if(s.preset) setPreset(s.preset, false);
-      if(typeof s.sfxEnabled !== "undefined") $("sfxEnabled").value = String(!!s.sfxEnabled);
-      if(typeof s.sfxVol !== "undefined") $("sfxVol").value = s.sfxVol;
-    } catch {}
-    updateLogCount();
-  }
-
-  function saveSettings(){
-    const s = {
-      wsUrl: $("wsUrl").value.trim(),
-      token: $("token").value.trim(),
-      operator: $("operator").value.trim(),
-      show: $("show").value.trim(),
-      preset: state.preset,
-      sfxEnabled: $("sfxEnabled").value === "true",
-      sfxVol: Number($("sfxVol").value || 0.6)
-    };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  }
-
-  function persistLog(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.localLog));
-    updateLogCount();
-  }
-
-  function updateLogCount(){
-    $("logCountHint").textContent = `${state.localLog.length} events logged.`;
-  }
-
-  function baseMeta(){
-    return {
-      ts: nowISO(),
-      t: nowShort(),
-      operator: $("operator").value.trim() || null,
-      show: $("show").value.trim() || null
-    };
-  }
-
-  // -------------------------
-  // Sequence logic
-  // -------------------------
-  function seqMaxFor(name){
-    if(name === "top5") return 5;
-    if(name === "actors3") return 3;
-    if(name === "reasons3") return 3;
-    return 5;
-  }
-
-  function setSequenceName(name){
-    state.seq.name = name;
-    state.seq.max = seqMaxFor(name);
-    // keep step within bounds
-    if(state.seq.step > state.seq.max) state.seq.step = state.seq.max;
-    renderSeqHint();
-  }
-
-  function renderSeqHint(){
-    const n = state.seq.name;
-    const label = state.seq.label ? ` • "${state.seq.label}"` : "";
-    $("seqStateHint").textContent = `State: ${n} step ${state.seq.step}/${state.seq.max}${label} (autoReset=${state.seq.autoReset})`;
-  }
-
-  function seqNext(){
-    if(state.seq.step < state.seq.max){
-      state.seq.step += 1;
-    } else {
-      if(state.seq.autoReset){
-        state.seq.step = 1; // loop back to first step
-      }
-    }
-    renderSeqHint();
-    emitSequence("next");
-  }
-
-  function seqBack(){
-    if(state.seq.step > 1) state.seq.step -= 1;
-    renderSeqHint();
-    emitSequence("back");
-  }
-
-  function seqReset(){
-    state.seq.step = 0;
-    renderSeqHint();
-    emitSequence("reset");
-  }
-
-  function emitSequence(action){
-    const payload = {
-      type: "sequence",
-      action,
-      seq: {
-        name: state.seq.name,
-        step: state.seq.step,
-        max: state.seq.max,
-        label: state.seq.label || null,
-        autoReset: state.seq.autoReset
-      }
-    };
-    sendEvent(payload);
-  }
-
-  // -------------------------
-  // WebSocket
-  // -------------------------
-  function getDefaultWsUrl(){
-    // Auto-detect based on current page location
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    // If we're served from the server, use same host
-    if(location.hostname && location.hostname !== "localhost" && !location.hostname.includes("github")){
+  // ========== Auto-detect WebSocket URL ==========
+  function getAutoWsUrl() {
+    // If served from a server (not localhost, not file://), use same host
+    if (location.protocol !== "file:" && location.hostname !== "localhost") {
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
       return `${protocol}//${location.host}`;
     }
-    // Fallback for GitHub Pages or local file
-    return "ws://localhost:3000";
+    return null; // Need manual config
   }
 
-  function connectWS(){
-    saveSettings();
-    const rawUrl = $("wsUrl").value.trim() || getDefaultWsUrl();
-    const token = $("token").value.trim();
-    const url = token ? rawUrl + (rawUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token) : rawUrl;
+  // ========== UI Helpers ==========
+  function toast(msg, duration = 1200) {
+    const el = $("toast");
+    el.textContent = msg;
+    el.classList.add("show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => el.classList.remove("show"), duration);
+  }
 
-    try{
-      if(state.ws) state.ws.close();
-      state.ws = new WebSocket(url);
-      setStatus("warn", "Connecting…");
+  function setStatus(ok, text) {
+    $("dot").className = "dot " + (ok ? "ok" : "bad");
+    $("statusText").textContent = text;
+  }
+
+  function updateSeqDisplay() {
+    const { step, max, name, label } = state.seq;
+    // For top5: step 1 shows #5, step 5 shows #1
+    if (step === 0) {
+      $("seqNum").textContent = "—";
+      $("seqLabel").textContent = "Click Next to start";
+    } else {
+      const display = name === "top5" ? `#${max - step + 1}` : step;
+      $("seqNum").textContent = display;
+      $("seqLabel").textContent = label || `Step ${step} of ${max}`;
+    }
+    $("seqName").textContent = name.toUpperCase().replace("TOP5", "TOP 5");
+  }
+
+  // ========== Settings ==========
+  function loadSettings() {
+    try {
+      const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+      if (s.wsUrl) $("wsUrl").value = s.wsUrl;
+      if (s.token) $("token").value = s.token;
+    } catch {}
+  }
+
+  function saveSettings() {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+      wsUrl: $("wsUrl").value.trim(),
+      token: $("token").value.trim()
+    }));
+  }
+
+  // ========== WebSocket ==========
+  function connect(url, token) {
+    if (state.ws) state.ws.close();
+    
+    let wsUrl = url || $("wsUrl").value.trim() || getAutoWsUrl();
+    const wsToken = token ?? $("token").value.trim();
+    
+    if (!wsUrl) {
+      setStatus(false, "No URL");
+      $("connPanel").classList.add("open");
+      return;
+    }
+    
+    if (wsToken) {
+      wsUrl += (wsUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(wsToken);
+    }
+
+    try {
+      state.ws = new WebSocket(wsUrl);
+      setStatus(false, "Connecting…");
 
       state.ws.onopen = () => {
         state.connected = true;
-        setStatus("ok", "Connected");
-        uiToast("Connected", url, 1500);
+        setStatus(true, "Connected");
+        toast("✓ Connected");
+        saveSettings();
       };
 
-      state.ws.onclose = () => {
+      state.ws.onclose = (e) => {
         state.connected = false;
-        setStatus("bad", "Disconnected");
-        uiToast("Disconnected", "WebSocket closed", 1500);
+        if (e.code === 1008) {
+          setStatus(false, "Auth Failed");
+          toast("Token invalid", 2000);
+          $("connPanel").classList.add("open");
+        } else {
+          setStatus(false, "Disconnected");
+        }
       };
 
       state.ws.onerror = () => {
         state.connected = false;
-        setStatus("bad", "Error");
-        uiToast("Error", "WebSocket error", 1800);
+        setStatus(false, "Error");
       };
 
-      state.ws.onmessage = (ev) => {
-        // Optional: server can send ack or status
-        try{
-          const msg = JSON.parse(ev.data);
-          if(msg && msg.type === "ack"){
-            uiToast("ACK", msg.message || "Event received", 1200);
-          }
+      state.ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === "ack") toast("✓ Sent");
         } catch {}
       };
-    } catch (e){
-      setStatus("bad", "Failed");
-      uiToast("Failed", String(e), 2200);
+    } catch {
+      setStatus(false, "Failed");
     }
   }
 
-  function disconnectWS(){
-    if(state.ws){
-      state.ws.close();
-      state.ws = null;
-    }
-    state.connected = false;
-    setStatus("bad", "Disconnected");
-    saveSettings();
-  }
-
-  // -------------------------
-  // Event sending + logging
-  // -------------------------
-  function logEvent(evt){
-    state.localLog.push(evt);
-    // keep log reasonable on phone
-    if(state.localLog.length > 3000) state.localLog = state.localLog.slice(-2500);
-    persistLog();
-  }
-
-  function sendEvent(body){
-    const evt = { ...baseMeta(), ...body };
-    logEvent(evt);
-
-    // send to server if connected
-    if(state.ws && state.ws.readyState === 1){
-      state.ws.send(JSON.stringify(evt));
-      uiToast("Sent", `${evt.type}${evt.trigger ? " • " + evt.trigger : ""}`, 1100);
+  function send(payload) {
+    if (state.ws?.readyState === 1) {
+      state.ws.send(JSON.stringify({
+        ts: new Date().toISOString(),
+        ...payload
+      }));
     } else {
-      uiToast("Saved locally", "Not connected — event logged", 1500);
+      toast("Not connected", 1500);
     }
   }
 
-  // -------------------------
-  // Presets (UI visibility)
-  // -------------------------
-  function setPreset(preset, showToast=true){
-    state.preset = preset;
-    const chips = document.querySelectorAll("#presetChips .chip");
-    chips.forEach(c => c.classList.toggle("active", c.dataset.preset === preset));
-
-    // Show/hide sections depending on preset
-    // Standard: show all
-    // Editing: focus markers + segmenting + less sequences
-    // Top5: focus sequences + quick toast
-    $("sequencesCard").style.display = (preset === "editing") ? "none" : "block";
-    $("sfxCard").style.display       = (preset === "editing") ? "none" : "block";
-    $("toastCard").style.display     = "block";
-    $("markersCard").style.display   = "block";
-    $("modesCard").style.display     = (preset === "top5") ? "block" : "block";
-
-    if(preset === "top5"){
-      $("seqName").value = "top5";
-      setSequenceName("top5");
-    }
-
-    saveSettings();
-    if(showToast) uiToast("Preset", preset, 900);
+  // ========== Actions ==========
+  function sendToast() {
+    const msg = $("toastMsg").value.trim();
+    if (!msg) return toast("Type a message");
+    send({ type: "toast", toast: { message: msg, variant: "info", durationMs: 2500 } });
+    $("toastMsg").value = "";
   }
 
-  // -------------------------
-  // Wire up UI
-  // -------------------------
-  function wire(){
-    // time ticker
-    setInterval(() => { $("nowTime").textContent = `Local time: ${nowShort()}`; }, 500);
-    $("nowTime").textContent = `Local time: ${nowShort()}`;
+  function sendMarker(trigger) {
+    send({ type: "marker", trigger, label: trigger });
+  }
 
-    $("connectBtn").addEventListener("click", connectWS);
-    $("disconnectBtn").addEventListener("click", disconnectWS);
+  function sendSpoiler(level) {
+    send({ type: "spoiler", level });
+    toast(`Spoiler: ${level}`);
+  }
 
-    // preset chips
-    document.querySelectorAll("#presetChips .chip").forEach(chip => {
-      chip.addEventListener("click", () => setPreset(chip.dataset.preset));
-    });
+  function seqNext() {
+    if (state.seq.step < state.seq.max) {
+      state.seq.step++;
+    } else {
+      state.seq.step = 1; // Loop
+    }
+    updateSeqDisplay();
+    send({ type: "sequence", action: "next", seq: state.seq });
+  }
 
-    // toast buttons
-    $("sendToast").addEventListener("click", () => {
-      const msg = $("toastMsg").value.trim();
-      if(!msg) return uiToast("Missing", "Type a message first", 1400);
-      sendEvent({
-        type: "toast",
-        toast: {
-          message: msg,
-          variant: $("toastType").value,
-          durationMs: Number($("toastDur").value || 2200)
-        }
-      });
-      $("toastMsg").value = "";
-    });
-    $("clearToast").addEventListener("click", () => {
-      sendEvent({ type: "toast", action: "clear" });
-    });
+  function seqBack() {
+    if (state.seq.step > 1) state.seq.step--;
+    updateSeqDisplay();
+    send({ type: "sequence", action: "back", seq: state.seq });
+  }
 
-    // marker triggers
+  function seqReset() {
+    state.seq.step = 0;
+    updateSeqDisplay();
+    send({ type: "sequence", action: "reset", seq: state.seq });
+  }
+
+  // ========== Event Listeners ==========
+  function wire() {
+    // Toast
+    $("sendToast").onclick = sendToast;
+    $("toastMsg").onkeydown = (e) => { if (e.key === "Enter") sendToast(); };
+
+    // Markers
     document.querySelectorAll("[data-trigger]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        sendEvent({
-          type: "marker",
-          trigger: btn.dataset.trigger,
-          label: btn.dataset.label || btn.textContent.trim()
-        });
-      });
+      btn.onclick = () => sendMarker(btn.dataset.trigger);
     });
 
-    // sequence controls
-    $("seqName").addEventListener("change", (e) => setSequenceName(e.target.value));
-    $("seqAutoReset").addEventListener("change", (e) => {
-      state.seq.autoReset = (e.target.value === "true");
-      renderSeqHint();
-      saveSettings();
-    });
-    $("seqLabel").addEventListener("input", (e) => {
-      state.seq.label = e.target.value.trim();
-      renderSeqHint();
-      saveSettings();
-    });
-
-    $("seqNext").addEventListener("click", seqNext);
-    $("seqBack").addEventListener("click", seqBack);
-    $("seqReset").addEventListener("click", seqReset);
-
-    // modes + spoiler
-    document.querySelectorAll("[data-mode]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        sendEvent({ type: "mode", mode: btn.dataset.mode });
-      });
-    });
+    // Spoilers
     document.querySelectorAll("[data-spoiler]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        sendEvent({ type: "spoiler", level: btn.dataset.spoiler });
-      });
+      btn.onclick = () => sendSpoiler(btn.dataset.spoiler);
     });
 
-    // sfx
-    document.querySelectorAll("[data-sfx]").forEach(btn => {
-      btn.addEventListener("click", () => {
-        if($("sfxEnabled").value !== "true"){
-          return uiToast("SFX disabled", "Enable it in settings", 1200);
-        }
-        sendEvent({
-          type: "sfx",
-          sfx: {
-            id: btn.dataset.sfx,
-            volume: Number($("sfxVol").value || 0.6)
-          }
-        });
-      });
-    });
+    // Sequences
+    $("seqNext").onclick = seqNext;
+    $("seqBack").onclick = seqBack;
+    $("seqReset").onclick = seqReset;
 
-    // dock buttons
-    $("bigHighlight").addEventListener("click", () => {
-      sendEvent({ type: "marker", trigger: "highlight", label: "🔥 Highlight" });
-    });
-    $("bigNext").addEventListener("click", () => {
-      sendEvent({ type: "marker", trigger: "next_segment", label: "⏭️ Next Segment" });
-    });
-    $("bigToast").addEventListener("click", () => {
-      const msg = prompt("Quick toast message:");
-      if(!msg) return;
-      sendEvent({
-        type: "toast",
-        toast: { message: msg.trim(), variant: "info", durationMs: 2200 }
-      });
-    });
+    // Dock
+    $("bigHighlight").onclick = () => sendMarker("highlight");
+    $("bigNext").onclick = () => sendMarker("next_segment");
 
-    // logs
-    $("copyLog").addEventListener("click", async () => {
-      const text = JSON.stringify(state.localLog, null, 2);
-      try{
-        await navigator.clipboard.writeText(text);
-        uiToast("Copied", "Log copied to clipboard", 1400);
-      } catch {
-        uiToast("Copy failed", "Clipboard blocked — use download", 1600);
-      }
-    });
+    // Connection panel toggle
+    $("connToggle").onclick = () => {
+      $("connPanel").classList.toggle("open");
+    };
 
-    $("downloadLog").addEventListener("click", () => {
-      const blob = new Blob([JSON.stringify(state.localLog, null, 2)], {type:"application/json"});
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `obs-remote-log-${new Date().toISOString().slice(0,19).replaceAll(":","-")}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2500);
-      uiToast("Downloaded", "JSON log saved", 1400);
-    });
+    // Connection buttons
+    $("connectBtn").onclick = () => connect();
+    $("disconnectBtn").onclick = () => {
+      if (state.ws) state.ws.close();
+      setStatus(false, "Disconnected");
+    };
 
-    $("clearLog").addEventListener("click", () => {
-      const ok = confirm("Clear local log on this phone?");
-      if(!ok) return;
-      state.localLog = [];
-      persistLog();
-      uiToast("Cleared", "Local log removed", 1200);
-    });
-
-    // save settings on change
-    ["wsUrl","token","operator","show","sfxVol","sfxEnabled"].forEach(id => {
-      $(id).addEventListener("change", saveSettings);
-      $(id).addEventListener("input", () => {
-        // don't spam storage too hard; lightweight
-        clearTimeout(saveSettings._t);
-        saveSettings._t = setTimeout(saveSettings, 250);
-      });
-    });
-
-    // init sequence
-    setSequenceName($("seqName").value);
-    state.seq.autoReset = ($("seqAutoReset").value === "true");
-    state.seq.label = $("seqLabel").value.trim();
-    renderSeqHint();
+    // Save on input
+    $("wsUrl").onchange = saveSettings;
+    $("token").onchange = saveSettings;
   }
 
-  // -------------------------
-  // Boot
-  // -------------------------
-  loadLocal();
+  // ========== Boot ==========
+  loadSettings();
   wire();
-  setStatus("bad", "Disconnected");
+  updateSeqDisplay();
+
+  // Auto-connect if on server
+  const autoUrl = getAutoWsUrl();
+  if (autoUrl) {
+    // Try auto-connect with saved token
+    const savedToken = $("token").value.trim();
+    connect(autoUrl, savedToken);
+  } else {
+    setStatus(false, "Manual");
+    $("connPanel").classList.add("open");
+  }
 })();
 </script>
 </body>
