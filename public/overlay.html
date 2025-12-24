@@ -1,0 +1,816 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>OBS Overlay</title>
+  <style>
+    :root{
+      --fg:#eaf1ff;
+      --muted:rgba(234,241,255,.72);
+      --glass:rgba(10,14,22,.42);
+      --glass2:rgba(10,14,22,.62);
+      --border:rgba(255,255,255,.10);
+      --good:#27d17f;
+      --warn:#f6c34a;
+      --bad:#ff4d6d;
+      --info:#6aa9ff;
+      --shadow: 0 18px 40px rgba(0,0,0,.35);
+      --radius: 18px;
+      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans";
+    }
+
+    /* OBS overlay defaults */
+    html,body{
+      margin:0;
+      width:100%;
+      height:100%;
+      overflow:hidden;
+      background: transparent;
+      color: var(--fg);
+      font-family: var(--font);
+    }
+    *{ box-sizing:border-box; }
+
+    /* Layout layers */
+    .layer{
+      position:fixed;
+      inset:0;
+      pointer-events:none; /* so OBS doesn't capture mouse interaction unless you want it */
+    }
+
+    /* Top-right HUD (mode + spoiler + connection) */
+    .hud{
+      position:absolute;
+      top: 22px;
+      right: 22px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      align-items:flex-end;
+      pointer-events:none;
+    }
+    .pill{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border:1px solid var(--border);
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      font-size: 14px;
+      line-height: 1;
+      white-space:nowrap;
+    }
+    .dot{
+      width:10px;height:10px;border-radius:50%;
+      background: var(--warn);
+      box-shadow: 0 0 0 4px rgba(246,195,74,.15);
+    }
+    .dot.ok{ background: var(--good); box-shadow: 0 0 0 4px rgba(39,209,127,.14); }
+    .dot.bad{ background: var(--bad); box-shadow: 0 0 0 4px rgba(255,77,109,.14); }
+    .pill .label{ color: var(--muted); font-weight: 650; letter-spacing:.1px; }
+    .pill strong{ font-weight: 800; }
+
+    .badge{
+      padding: 10px 12px;
+      border-radius: 999px;
+      border:1px solid var(--border);
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      font-size: 14px;
+      font-weight: 850;
+      letter-spacing:.2px;
+      display:none;
+    }
+    .badge.show{ display:block; }
+    .badge.cinema{ border-color: rgba(106,169,255,.35); background: rgba(106,169,255,.12); }
+    .badge.analysis{ border-color: rgba(246,195,74,.35); background: rgba(246,195,74,.12); }
+    .badge.minimal{ border-color: rgba(255,255,255,.16); background: rgba(255,255,255,.06); }
+
+    .spoiler{
+      display:none;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border:1px solid var(--border);
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing:.3px;
+      text-transform: uppercase;
+    }
+    .spoiler.show{ display:block; }
+    .spoiler.safe{ border-color: rgba(39,209,127,.35); background: rgba(39,209,127,.12); }
+    .spoiler.light{ border-color: rgba(246,195,74,.35); background: rgba(246,195,74,.12); }
+    .spoiler.full{ border-color: rgba(255,77,109,.35); background: rgba(255,77,109,.12); }
+
+    /* Toasts (bottom-center) */
+    .toasts{
+      position:absolute;
+      left: 50%;
+      bottom: 54px;
+      transform: translateX(-50%);
+      width: min(980px, calc(100% - 40px));
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      align-items:center;
+    }
+    .toast{
+      width: 100%;
+      max-width: 900px;
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      background: var(--glass2);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      padding: 14px 16px;
+      display:flex;
+      align-items:flex-start;
+      gap:12px;
+      opacity:0;
+      transform: translateY(14px) scale(.98);
+      transition: opacity .22s ease, transform .22s ease;
+    }
+    .toast.show{
+      opacity:1;
+      transform: translateY(0) scale(1);
+    }
+    .icon{
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      margin-top: 4px;
+      flex: 0 0 auto;
+    }
+    .icon.info{ background: var(--info); box-shadow: 0 0 0 6px rgba(106,169,255,.12); }
+    .icon.good{ background: var(--good); box-shadow: 0 0 0 6px rgba(39,209,127,.12); }
+    .icon.warn{ background: var(--warn); box-shadow: 0 0 0 6px rgba(246,195,74,.12); }
+    .icon.bad{ background: var(--bad); box-shadow: 0 0 0 6px rgba(255,77,109,.12); }
+
+    .toast h3{
+      margin:0;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing:.2px;
+    }
+    .toast p{
+      margin: 4px 0 0;
+      font-size: 15px;
+      color: var(--muted);
+      font-weight: 600;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    /* Cinematic stinger (full-screen flash) */
+    .stinger{
+      position:absolute;
+      inset:0;
+      background: radial-gradient(1200px 800px at 50% 40%, rgba(255,255,255,.14), transparent 55%),
+                  linear-gradient(180deg, rgba(106,169,255,.18), rgba(10,14,22,.0) 60%);
+      opacity:0;
+      transform: scale(1.01);
+      transition: opacity .35s ease;
+      mix-blend-mode: screen;
+    }
+    .stinger.show{ opacity:1; }
+
+    /* Lower third */
+    .lowerthird{
+      position:absolute;
+      left: 36px;
+      bottom: 58px;
+      max-width: min(720px, calc(100% - 72px));
+      border-radius: 22px;
+      border:1px solid var(--border);
+      background: var(--glass2);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      padding: 14px 16px;
+      opacity:0;
+      transform: translateY(18px);
+      transition: opacity .22s ease, transform .22s ease;
+      display:none;
+    }
+    .lowerthird.show{
+      display:block;
+      opacity:1;
+      transform: translateY(0);
+    }
+    .lowerthird .kicker{
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing:.4px;
+      text-transform: uppercase;
+      margin:0 0 4px;
+    }
+    .lowerthird .title{
+      margin:0;
+      font-size: 22px;
+      font-weight: 950;
+      letter-spacing:.2px;
+      line-height: 1.1;
+    }
+    .lowerthird .subtitle{
+      margin: 6px 0 0;
+      font-size: 15px;
+      color: var(--muted);
+      font-weight: 650;
+      line-height: 1.25;
+      overflow-wrap:anywhere;
+    }
+
+    /* Sequence panel (top-left) */
+    .sequence{
+      position:absolute;
+      left: 22px;
+      top: 22px;
+      max-width: min(560px, calc(100% - 44px));
+      border-radius: 22px;
+      border:1px solid var(--border);
+      background: var(--glass);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      padding: 12px 14px;
+      opacity:0;
+      transform: translateY(-10px);
+      transition: opacity .2s ease, transform .2s ease;
+      display:none;
+    }
+    .sequence.show{
+      display:block;
+      opacity:1;
+      transform: translateY(0);
+    }
+    .seqTitle{
+      margin:0;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 900;
+      letter-spacing:.4px;
+      text-transform: uppercase;
+    }
+    .seqMain{
+      margin: 6px 0 0;
+      display:flex;
+      align-items:baseline;
+      gap:10px;
+      flex-wrap:wrap;
+    }
+    .rank{
+      font-size: 44px;
+      font-weight: 1000;
+      letter-spacing: .6px;
+      line-height: 1;
+    }
+    .seqLabel{
+      font-size: 16px;
+      color: var(--muted);
+      font-weight: 750;
+      letter-spacing:.2px;
+      line-height: 1.25;
+      overflow-wrap:anywhere;
+    }
+    .countdown{
+      margin-top: 10px;
+      height: 12px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.10);
+      overflow:hidden;
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .countdown > div{
+      height:100%;
+      width: 0%;
+      background: rgba(106,169,255,.55);
+      transition: width .08s linear;
+    }
+
+    /* Big reaction burst (center) */
+    .burst{
+      position:absolute;
+      inset:0;
+      display:grid;
+      place-items:center;
+      opacity:0;
+      transform: scale(.98);
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    .burst.show{
+      opacity:1;
+      transform: scale(1);
+    }
+    .burstCard{
+      border-radius: 30px;
+      border:1px solid var(--border);
+      background: rgba(10,14,22,.50);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+      padding: 22px 26px;
+      display:flex;
+      align-items:center;
+      gap:14px;
+      max-width: min(720px, calc(100% - 44px));
+    }
+    .burstEmoji{
+      font-size: 46px;
+      line-height: 1;
+      filter: drop-shadow(0 12px 22px rgba(0,0,0,.35));
+    }
+    .burstText{
+      display:flex; flex-direction:column;
+    }
+    .burstText strong{
+      font-size: 26px;
+      font-weight: 1000;
+      letter-spacing:.2px;
+      line-height: 1.05;
+    }
+    .burstText span{
+      margin-top: 6px;
+      font-size: 15px;
+      color: var(--muted);
+      font-weight: 650;
+      line-height: 1.25;
+      overflow-wrap:anywhere;
+    }
+
+    /* Minimal mode hides stuff */
+    .minimalHide{ display:block; }
+    .mode-minimal .minimalHide{ display:none !important; }
+
+    /* Safe in OBS: reduce animations if needed */
+    @media (prefers-reduced-motion: reduce){
+      .toast,.lowerthird,.sequence,.burst{ transition:none !important; }
+      .stinger{ transition:none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layer" id="root">
+
+    <div class="stinger" id="stinger"></div>
+
+    <!-- Sequence panel -->
+    <div class="sequence minimalHide" id="sequencePanel" aria-hidden="true">
+      <p class="seqTitle" id="seqTitle">SEQUENCE</p>
+      <div class="seqMain">
+        <div class="rank" id="seqRank">—</div>
+        <div class="seqLabel" id="seqLabel">Waiting…</div>
+      </div>
+      <div class="countdown"><div id="seqBar"></div></div>
+    </div>
+
+    <!-- HUD -->
+    <div class="hud">
+      <div class="pill minimalHide" title="WebSocket connection">
+        <span class="dot" id="connDot"></span>
+        <span class="label">Overlay</span>
+        <strong id="connText">Disconnected</strong>
+      </div>
+      <div class="badge minimalHide" id="modeBadge">🎞 Cinema</div>
+      <div class="spoiler minimalHide" id="spoilerBadge">🔒 Spoiler Safe</div>
+    </div>
+
+    <!-- Lower third -->
+    <div class="lowerthird minimalHide" id="lowerthird">
+      <p class="kicker" id="ltKicker">NOW TALKING ABOUT</p>
+      <p class="title" id="ltTitle">—</p>
+      <p class="subtitle" id="ltSubtitle"></p>
+    </div>
+
+    <!-- Reaction burst -->
+    <div class="burst minimalHide" id="burst">
+      <div class="burstCard">
+        <div class="burstEmoji" id="burstEmoji">👏</div>
+        <div class="burstText">
+          <strong id="burstStrong">Applause</strong>
+          <span id="burstSpan">Marker captured</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toasts -->
+    <div class="toasts minimalHide" id="toasts"></div>
+
+    <!-- Audio assets (optional, can be replaced with your own paths) -->
+    <audio id="sfx-applause" preload="auto"></audio>
+    <audio id="sfx-boo" preload="auto"></audio>
+    <audio id="sfx-ding" preload="auto"></audio>
+    <audio id="sfx-woosh" preload="auto"></audio>
+
+  </div>
+
+<script>
+(() => {
+  // ============================
+  // CONFIG
+  // ============================
+  // Auto-detect WebSocket URL based on current page location
+  // Works for both local dev and Heroku deployment
+  const q = new URLSearchParams(location.search);
+  
+  // Build WS URL: use wss:// for HTTPS, ws:// for HTTP
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  const defaultWsUrl = `${protocol}//${location.host}`;
+  
+  const wsBase = q.get("ws") || defaultWsUrl;
+  const token = q.get("token") || "";
+  const role = q.get("role") || "overlay";
+  const WS_URL = wsBase + (wsBase.includes("?") ? "&" : "?") + "role=" + encodeURIComponent(role) +
+                 (token ? "&token=" + encodeURIComponent(token) : "");
+
+  // Optional: map sfx IDs to actual audio files
+  // Put your audio files in the same folder or served path:
+  // public/sfx/applause.mp3, boo.mp3, ding.mp3, woosh.mp3
+  const SFX_FILES = {
+    applause: q.get("sfx_applause") || "sfx/applause.mp3",
+    boo:      q.get("sfx_boo")      || "sfx/boo.mp3",
+    ding:     q.get("sfx_ding")     || "sfx/ding.mp3",
+    woosh:    q.get("sfx_woosh")    || "sfx/woosh.mp3",
+  };
+
+  // ============================
+  // DOM
+  // ============================
+  const $ = (id) => document.getElementById(id);
+  const root = $("root");
+  const connDot = $("connDot");
+  const connText = $("connText");
+  const toastsEl = $("toasts");
+  const stingerEl = $("stinger");
+  const lowerthirdEl = $("lowerthird");
+  const ltTitle = $("ltTitle");
+  const ltSubtitle = $("ltSubtitle");
+  const ltKicker = $("ltKicker");
+  const burstEl = $("burst");
+  const burstEmoji = $("burstEmoji");
+  const burstStrong = $("burstStrong");
+  const burstSpan = $("burstSpan");
+  const modeBadge = $("modeBadge");
+  const spoilerBadge = $("spoilerBadge");
+  const sequencePanel = $("sequencePanel");
+  const seqTitle = $("seqTitle");
+  const seqRank = $("seqRank");
+  const seqLabel = $("seqLabel");
+  const seqBar = $("seqBar");
+
+  // audio elements
+  const sfxEl = {
+    applause: $("sfx-applause"),
+    boo: $("sfx-boo"),
+    ding: $("sfx-ding"),
+    woosh: $("sfx-woosh"),
+  };
+
+  // attach sources
+  Object.keys(SFX_FILES).forEach((k) => {
+    if (sfxEl[k]) sfxEl[k].src = SFX_FILES[k];
+  });
+
+  // ============================
+  // STATE
+  // ============================
+  let ws = null;
+  let connected = false;
+  let mode = "cinema";    // cinema | analysis | minimal
+  let spoiler = "safe";   // safe | light | full
+  let lastSeq = { name:null, step:0, max:0, label:null, autoReset:true };
+
+  // ============================
+  // UI helpers
+  // ============================
+  function setConn(kind, text){
+    connDot.classList.remove("ok","bad");
+    if(kind === "ok") connDot.classList.add("ok");
+    if(kind === "bad") connDot.classList.add("bad");
+    connText.textContent = text;
+  }
+
+  function setMode(newMode){
+    mode = newMode || "cinema";
+    root.classList.remove("mode-minimal");
+    modeBadge.className = "badge minimalHide";
+    let label = "🎞 Cinema";
+    if(mode === "analysis"){ label = "🧩 Analysis"; modeBadge.classList.add("analysis"); }
+    else if(mode === "minimal"){ label = "🫥 Minimal"; root.classList.add("mode-minimal"); modeBadge.classList.add("minimal"); }
+    else { modeBadge.classList.add("cinema"); }
+    modeBadge.textContent = label;
+    modeBadge.classList.add("show");
+    // auto-hide badge after a few seconds unless in minimal (it will be hidden anyway)
+    clearTimeout(setMode._t);
+    setMode._t = setTimeout(() => modeBadge.classList.remove("show"), 4500);
+  }
+
+  function setSpoiler(level){
+    spoiler = level || "safe";
+    spoilerBadge.className = "spoiler minimalHide show";
+    if(spoiler === "safe"){
+      spoilerBadge.classList.add("safe");
+      spoilerBadge.textContent = "🔒 Spoiler Safe";
+    } else if(spoiler === "light"){
+      spoilerBadge.classList.add("light");
+      spoilerBadge.textContent = "⚠️ Light Spoilers";
+    } else {
+      spoilerBadge.classList.add("full");
+      spoilerBadge.textContent = "☠️ Full Spoilers";
+    }
+    clearTimeout(setSpoiler._t);
+    // keep visible by default (comment out if you want auto-hide)
+    // setSpoiler._t = setTimeout(() => spoilerBadge.classList.remove("show"), 7000);
+  }
+
+  function flashStinger(ms=420){
+    stingerEl.classList.add("show");
+    clearTimeout(flashStinger._t);
+    flashStinger._t = setTimeout(() => stingerEl.classList.remove("show"), ms);
+  }
+
+  function showLowerThird(title, subtitle="", kicker="NOW TALKING ABOUT", durationMs=5000){
+    ltKicker.textContent = kicker || "NOW TALKING ABOUT";
+    ltTitle.textContent = title || "—";
+    ltSubtitle.textContent = subtitle || "";
+    lowerthirdEl.classList.add("show");
+    clearTimeout(showLowerThird._t);
+    showLowerThird._t = setTimeout(() => lowerthirdEl.classList.remove("show"), durationMs);
+  }
+
+  function showBurst(emoji, title, subtitle, durationMs=1100){
+    burstEmoji.textContent = emoji || "✨";
+    burstStrong.textContent = title || "Marker";
+    burstSpan.textContent = subtitle || "";
+    burstEl.classList.add("show");
+    clearTimeout(showBurst._t);
+    showBurst._t = setTimeout(() => burstEl.classList.remove("show"), durationMs);
+  }
+
+  function pushToast(message, variant="info", durationMs=2200){
+    const t = document.createElement("div");
+    t.className = "toast";
+    const dot = document.createElement("div");
+    dot.className = "icon " + (variant || "info");
+    const wrap = document.createElement("div");
+    const h = document.createElement("h3");
+    h.textContent = message || "";
+    const p = document.createElement("p");
+    p.textContent = "";
+    wrap.appendChild(h);
+    wrap.appendChild(p);
+    t.appendChild(dot);
+    t.appendChild(wrap);
+    toastsEl.appendChild(t);
+
+    // animate in
+    requestAnimationFrame(() => t.classList.add("show"));
+
+    // remove
+    const ttl = Math.max(700, Number(durationMs || 2200));
+    setTimeout(() => {
+      t.classList.remove("show");
+      setTimeout(() => t.remove(), 220);
+    }, ttl);
+
+    // keep list short
+    while (toastsEl.children.length > 3) toastsEl.removeChild(toastsEl.firstChild);
+  }
+
+  function clearToasts(){
+    [...toastsEl.children].forEach(el => el.remove());
+  }
+
+  // ============================
+  // Sequence rendering
+  // ============================
+  function seqTitleFor(name){
+    if(name === "top5") return "TOP 5";
+    if(name === "actors3") return "3 ACTORS";
+    if(name === "reasons3") return "3 REASONS";
+    return "SEQUENCE";
+  }
+  function seqDisplayNumber(name, step, max){
+    // For Top 5: step 1 => #5, step 2 => #4 ...
+    if(name === "top5"){
+      if(step <= 0) return "—";
+      return "#" + (max - step + 1);
+    }
+    // For 3 items: step 1 => 3, step 2 => 2, step 3 => 1
+    if(name === "actors3" || name === "reasons3"){
+      if(step <= 0) return "—";
+      return String(max - step + 1);
+    }
+    if(step <= 0) return "—";
+    return String(step);
+  }
+
+  function showSequence(seq){
+    lastSeq = { ...lastSeq, ...seq };
+    const { name, step, max, label } = lastSeq;
+
+    seqTitle.textContent = seqTitleFor(name);
+    seqRank.textContent = seqDisplayNumber(name, step, max);
+    seqLabel.textContent = label ? label : "Click next to reveal…";
+
+    // show panel if active
+    if(step > 0){
+      sequencePanel.classList.add("show");
+      // quick “countdown bar” animation 0->100 in ~320ms (for drama)
+      seqBar.style.width = "0%";
+      requestAnimationFrame(() => {
+        seqBar.style.width = "100%";
+      });
+      // stinger flash + woosh on each step
+      flashStinger(320);
+      playSfx("woosh", 0.45);
+      // auto-hide after a while
+      clearTimeout(showSequence._t);
+      showSequence._t = setTimeout(() => sequencePanel.classList.remove("show"), 5200);
+    } else {
+      sequencePanel.classList.remove("show");
+    }
+  }
+
+  // ============================
+  // Audio
+  // ============================
+  async function playSfx(id, volume=0.6){
+    const el = sfxEl[id];
+    if(!el) return;
+
+    try{
+      el.pause();
+      el.currentTime = 0;
+      el.volume = Math.max(0, Math.min(1, Number(volume)));
+      await el.play();
+    }catch(e){
+      // In OBS Browser Source, autoplay policies vary. If blocked, it will fail silently.
+      // You can enable "Control audio via OBS" and make sure Browser Source isn't muted.
+    }
+  }
+
+  // ============================
+  // Event handlers
+  // ============================
+  function handleToast(evt){
+    if(evt.action === "clear"){ clearToasts(); return; }
+    const t = evt.toast || {};
+    const msg = t.message || "";
+    const variant = t.variant || "info";
+    const dur = t.durationMs || 2200;
+    if(msg) pushToast(msg, variant, dur);
+  }
+
+  function handleMarker(evt){
+    const trig = evt.trigger || "marker";
+    const label = evt.label || trig;
+
+    // default: small toast
+    pushToast(label, "info", 1600);
+
+    // show burst for key markers
+    if(trig === "applause"){
+      showBurst("👏", "Applause", "Marker captured", 1000);
+      playSfx("applause", 0.7);
+    } else if(trig === "disagree"){
+      showBurst("❌", "Disagree", "Noted for edit", 1000);
+      playSfx("boo", 0.55);
+    } else if(trig === "highlight"){
+      showBurst("🔥", "Highlight", "Clip this moment", 1100);
+      playSfx("ding", 0.55);
+      flashStinger(420);
+    } else if(trig === "wtf"){
+      showBurst("😳", "WTF Moment", "Audience reaction", 1100);
+      playSfx("ding", 0.6);
+    } else if(trig === "next_segment"){
+      showBurst("⏭️", "Next Segment", "Topic switch", 900);
+      flashStinger(380);
+      // also show lower third quickly
+      showLowerThird("Next Segment", "", "SEGMENT", 2200);
+    } else if(trig === "start_talking"){
+      showLowerThird("Start Talking", "", "MARKER", 2200);
+    } else if(trig === "keypoint"){
+      showBurst("🧠", "Key Point", "Important note", 900);
+      playSfx("ding", 0.5);
+    } else if(trig === "funny"){
+      showBurst("😂", "Funny", "Clip-worthy", 900);
+      playSfx("ding", 0.45);
+    } else {
+      // generic marker
+      showBurst("✨", label, "Marker captured", 900);
+    }
+
+    // OPTIONAL: If you want markers to also appear as lower thirds:
+    // showLowerThird(label, "", "MARKER", 2500);
+  }
+
+  function handleMode(evt){
+    setMode(evt.mode);
+  }
+
+  function handleSpoiler(evt){
+    setSpoiler(evt.level);
+  }
+
+  function handleSequence(evt){
+    // evt.seq has: name, step, max, label, autoReset
+    if(evt.action === "reset"){
+      showSequence({ ...evt.seq, step: 0 });
+      return;
+    }
+    showSequence(evt.seq || {});
+  }
+
+  function handleSfx(evt){
+    const s = evt.sfx || {};
+    if(!s.id) return;
+    playSfx(String(s.id), s.volume ?? 0.6);
+  }
+
+  // Optional: you can also show a "lower third" via toast event if you want.
+  // Example payload:
+  // { type:"lowerthird", title:"Movie #5", subtitle:"Heat (1995)", kicker:"TOP 5", durationMs:6000 }
+  function handleLowerThird(evt){
+    showLowerThird(evt.title || "—", evt.subtitle || "", evt.kicker || "NOW TALKING ABOUT", evt.durationMs || 5500);
+  }
+
+  // ============================
+  // WebSocket connect
+  // ============================
+  function connect(){
+    try{
+      if(ws) ws.close();
+      ws = new WebSocket(WS_URL);
+      setConn("bad", "Connecting…");
+
+      ws.onopen = () => {
+        connected = true;
+        setConn("ok", "Connected");
+        pushToast("Overlay connected", "good", 1200);
+        // set defaults
+        setMode(mode);
+        setSpoiler(spoiler);
+      };
+
+      ws.onclose = () => {
+        connected = false;
+        setConn("bad", "Disconnected");
+        pushToast("Overlay disconnected", "bad", 1200);
+        // retry
+        scheduleReconnect();
+      };
+
+      ws.onerror = () => {
+        connected = false;
+        setConn("bad", "Error");
+        scheduleReconnect();
+      };
+
+      ws.onmessage = (ev) => {
+        const evt = (() => { try { return JSON.parse(ev.data); } catch { return null; } })();
+        if(!evt || typeof evt !== "object") return;
+
+        // Ignore acks/hello noise
+        if(evt.type === "ack" || evt.type === "hello" || evt.type === "presence") return;
+
+        // MAIN DISPATCH
+        switch(evt.type){
+          case "toast": handleToast(evt); break;
+          case "marker": handleMarker(evt); break;
+          case "mode": handleMode(evt); break;
+          case "spoiler": handleSpoiler(evt); break;
+          case "sequence": handleSequence(evt); break;
+          case "sfx": handleSfx(evt); break;
+          case "lowerthird": handleLowerThird(evt); break;
+          default:
+            // unknown events -> debug toast
+            // pushToast(`Event: ${evt.type}`, "info", 900);
+            break;
+        }
+      };
+
+    } catch(e){
+      setConn("bad", "Failed");
+      scheduleReconnect();
+    }
+  }
+
+  function scheduleReconnect(){
+    clearTimeout(scheduleReconnect._t);
+    scheduleReconnect._t = setTimeout(() => connect(), 1500);
+  }
+
+  // Boot
+  setConn("bad", "Disconnected");
+  setMode("cinema");
+  setSpoiler("safe");
+  connect();
+})();
+</script>
+</body>
+</html>
