@@ -1,0 +1,1 @@
+https://www.amazon.com.mx/Rode-RodeCaster-Duo-Mezclador-transmisi%C3%B3n/dp/B0BQLJYSBX/ref=asc_df_B0BQLJYSBX?mcid=1c52eb3a497f3dfaab3b6a7f702ef41f&tag=gledskshopmx-20&linkCode=df0&hvadid=709968414706&hvpos=&hvnetw=g&hvrand=10154613899110135554&hvpone=&hvptwo=&hvqmt=&hvdev=c&hvdvcmdl=&hvlocint=&hvlocphy=1010005&hvtargid=pla-2186959481653&language=es_MX&gad_source=1&th=1
