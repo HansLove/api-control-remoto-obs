@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Corazón 3D · Amor y amistad</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --pink: #ff4081;
+      --rose: #e91e63;
+      --bg: transparent;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: Quicksand, sans-serif;
+    }
+    #wrap {
+      position: fixed;
+      inset: 0;
+    }
+    canvas#gl {
+      position: absolute;
+      inset: 0;
+      display: block;
+    }
+
+    .overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      mix-blend-mode: screen;
+      opacity: 0.4;
+    }
+    .glow {
+      background: radial-gradient(ellipse 80% 50% at 50% 50%,
+        rgba(255, 64, 129, 0.12) 0%,
+        rgba(233, 30, 99, 0.04) 50%,
+        transparent 70%);
+    }
+
+    #hud {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      color: var(--pink);
+      text-shadow: 0 0 12px rgba(255, 64, 129, 0.5);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      opacity: 0.9;
+    }
+    .corner {
+      position: absolute;
+      padding: 10px 14px;
+      background: linear-gradient(135deg, rgba(255, 64, 129, 0.08), transparent);
+      border: 1px solid rgba(255, 64, 129, 0.2);
+      border-radius: 12px;
+      backdrop-filter: blur(4px);
+    }
+    #tl { top: 12px; left: 12px; }
+    #tr { top: 12px; right: 12px; text-align: right; }
+    .label { opacity: 0.8; font-weight: 500; }
+    .value { font-weight: 700; }
+
+    video#cam {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #hint {
+      position: absolute;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      color: rgba(255, 64, 129, 0.95);
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      padding: 12px 20px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 64, 129, 0.25);
+      background: rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(6px);
+      text-shadow: 0 0 14px rgba(255, 64, 129, 0.4);
+      pointer-events: none;
+      user-select: none;
+      text-align: center;
+    }
+
+    #relay-status {
+      display: none;
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: #c8e6c9;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(200, 230, 201, 0.5);
+      background: rgba(0, 0, 0, 0.4);
+      pointer-events: none;
+    }
+
+    body.obs-mode #hud,
+    body.obs-mode #hint { display: none !important; }
+    body.transparent,
+    html.transparent { background: transparent !important; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="gl"></canvas>
+    <div class="overlay glow"></div>
+
+    <div id="hud">
+      <div id="tl" class="corner">
+        <div><span class="label">FPS</span> <span class="value" id="fps">--</span></div>
+      </div>
+      <div id="tr" class="corner">
+        <div><span class="label">CORAZÓN</span> <span class="value" id="mode">ON</span></div>
+      </div>
+    </div>
+
+    <div id="hint">Acerca las manos al corazón para que reaccione. ¡Energía, amor y mucho éxito!</div>
+    <div id="relay-status">Enviando al relé ✓</div>
+    <video id="cam" playsinline></video>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.min.js"></script>
+
+  <script>
+    (() => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('obs') === '1' || urlParams.get('presentation') === '1') {
+        document.body.classList.add('obs-mode');
+      }
+      if (urlParams.get('transparent') === '1') {
+        document.body.classList.add('transparent');
+        document.documentElement.classList.add('transparent');
+      }
+      const broadcastHands = urlParams.get('broadcast') === '1';
+      if (broadcastHands && urlParams.get('transparent') !== '0') {
+        document.body.classList.add('transparent');
+        document.documentElement.classList.add('transparent');
+      }
+
+      const PARTICLE_COUNT = 14000;
+      const HEART_SCALE = 160;
+      const HEART_OFFSET_X = -435;
+      const HEART_OFFSET_Y = 275;
+      const PARTICLE_SIZE = 2.6;
+      const LERP_RETURN = 0.14;
+      const REPULSE_STRENGTH = 1.9;
+      const SCATTER_IMPULSE = 3.0;
+      const SMOOTH_LERP = 0.35;
+      const PULSE_AMP = 0.06;
+      const PULSE_FREQ = 0.0022;
+
+      const C_ROSE = 0xe91e63;
+      const C_PINK = 0xff4081;
+      const C_HOT = 0xff1744;
+
+      const $fps = document.getElementById('fps');
+      const $mode = document.getElementById('mode');
+
+      const canvas = document.getElementById('gl');
+      const useTransparent = document.body.classList.contains('transparent');
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: false,
+        alpha: useTransparent,
+        powerPreference: 'high-performance'
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setClearColor(0x000000, useTransparent ? 0 : 1);
+      renderer.autoClear = true;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(55, 1, 1, 5000);
+      camera.position.set(0, 0, 1100);
+      camera.lookAt(0, 0, 0);
+
+      let vw = 1, vh = 1;
+      let viewW = 1200, viewH = 700;
+      function resize() {
+        vw = window.innerWidth;
+        vh = window.innerHeight;
+        renderer.setSize(vw, vh, false);
+        camera.aspect = vw / vh;
+        camera.updateProjectionMatrix();
+        const dist = camera.position.z;
+        const fovRad = camera.fov * Math.PI / 180;
+        viewH = 2 * Math.tan(fovRad / 2) * dist;
+        viewW = viewH * camera.aspect;
+      }
+      window.addEventListener('resize', resize, { passive: true });
+      resize();
+
+      const positions = new Float32Array(PARTICLE_COUNT * 3);
+      const velocities = new Float32Array(PARTICLE_COUNT * 3);
+      const targets = new Float32Array(PARTICLE_COUNT * 3);
+      const baseTargets = new Float32Array(PARTICLE_COUNT * 3);
+      const colors = new Float32Array(PARTICLE_COUNT * 3);
+      const phase = new Float32Array(PARTICLE_COUNT);
+      const seed = new Float32Array(PARTICLE_COUNT);
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const i3 = i * 3;
+        const rx = (Math.random() - 0.5) * viewW * 0.8;
+        const ry = (Math.random() - 0.5) * viewH * 0.8;
+        const rz = (Math.random() - 0.5) * 200;
+        positions[i3 + 0] = rx;
+        positions[i3 + 1] = ry;
+        positions[i3 + 2] = rz;
+        velocities[i3 + 0] = (Math.random() - 0.5) * 0.5;
+        velocities[i3 + 1] = (Math.random() - 0.5) * 0.5;
+        velocities[i3 + 2] = (Math.random() - 0.5) * 0.3;
+        targets[i3 + 0] = rx;
+        targets[i3 + 1] = ry;
+        targets[i3 + 2] = rz;
+        phase[i] = Math.random() * Math.PI * 2;
+        seed[i] = Math.random();
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({
+        size: PARTICLE_SIZE,
+        sizeAttenuation: true,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.94,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: true
+      });
+
+      const points = new THREE.Points(geometry, material);
+      scene.add(points);
+
+      function hexToRgb01(hex) {
+        return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
+      }
+
+      function buildHeartTargets(scale, pulseScale) {
+        const N = PARTICLE_COUNT;
+        const s = scale * (pulseScale || 1);
+        const norm = 1 / 20;
+
+        for (let i = 0; i < N; i++) {
+          const i3 = i * 3;
+          const t = (i / N) * Math.PI * 2 + (i * 0.1375);
+          const phi = (i * 2.39996) % (Math.PI * 2);
+
+          const sinT = Math.sin(t);
+          const hx = 16 * sinT * sinT * sinT;
+          const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+
+          const nx = (hx * norm) * Math.cos(phi);
+          const ny = hy * norm;
+          const nz = (hx * norm) * Math.sin(phi);
+
+          baseTargets[i3 + 0] = nx * s;
+          baseTargets[i3 + 1] = ny * s;
+          baseTargets[i3 + 2] = nz * s;
+
+          const mix = (ny * 0.5 + 0.5);
+          const [r1, g1, b1] = hexToRgb01(C_ROSE);
+          const [r2, g2, b2] = hexToRgb01(C_PINK);
+          const [r3, g3, b3] = hexToRgb01(C_HOT);
+          const r = r1 * (1 - mix) + r2 * mix * 0.7 + r3 * mix * 0.3;
+          const g = g1 * (1 - mix) + g2 * mix * 0.7 + g3 * mix * 0.3;
+          const b = b1 * (1 - mix) + b2 * mix * 0.7 + b3 * mix * 0.3;
+          colors[i3 + 0] = Math.min(1, r);
+          colors[i3 + 1] = Math.min(1, g);
+          colors[i3 + 2] = Math.min(1, b);
+        }
+        geometry.attributes.color.needsUpdate = true;
+      }
+
+      buildHeartTargets(HEART_SCALE, 1);
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const i3 = i * 3;
+        targets[i3 + 0] = baseTargets[i3 + 0] + HEART_OFFSET_X;
+        targets[i3 + 1] = baseTargets[i3 + 1] + HEART_OFFSET_Y;
+        targets[i3 + 2] = baseTargets[i3 + 2];
+      }
+
+      let rightDetected = false;
+      let rightIndex = new THREE.Vector3(0, 0, 0);
+      let rightIndexSmoothed = new THREE.Vector3(0, 0, 0);
+      let rightPrev = new THREE.Vector3(0, 0, 0);
+      let rightVel = new THREE.Vector3(0, 0, 0);
+      let leftDetected = false;
+      let leftFingers = 0;
+      let leftCatch = false;
+      let leftPalm = new THREE.Vector3(0, 0, 0);
+      let scatterPulse = 0;
+
+      function normToWorld(u, v) {
+        const x = ((1 - u) - 0.5) * viewW;
+        const y = (0.5 - v) * viewH;
+        return new THREE.Vector3(x, y, 0);
+      }
+
+      function palmCenter(landmarks) {
+        const a = landmarks[0], b = landmarks[5], c = landmarks[17];
+        const u = (a.x + b.x + c.x) / 3;
+        const v = (a.y + b.y + c.y) / 3;
+        return normToWorld(u, v);
+      }
+
+      function countExtendedFingers(landmarks, handednessLabel) {
+        let count = 0;
+        const tips = [4, 8, 12, 16, 20];
+        const pips = [3, 6, 10, 14, 18];
+        const thumbTip = landmarks[tips[0]];
+        const thumbIP = landmarks[pips[0]];
+        if (handednessLabel === 'Left') {
+          if (thumbTip.x < thumbIP.x) count++;
+        } else {
+          if (thumbTip.x > thumbIP.x) count++;
+        }
+        for (let i = 1; i < 5; i++) {
+          const tip = landmarks[tips[i]];
+          const pip = landmarks[pips[i]];
+          if (tip.y < pip.y) count++;
+        }
+        return count;
+      }
+
+      const video = document.getElementById('cam');
+      const hands = new Hands({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      });
+      hands.setOptions({
+        maxNumHands: 2,
+        modelComplexity: 1,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+      });
+
+      hands.onResults((results) => {
+        leftDetected = false;
+        rightDetected = false;
+        leftFingers = 0;
+        leftCatch = false;
+
+        if (!results.multiHandLandmarks || !results.multiHandedness) return;
+
+        for (let h = 0; h < results.multiHandLandmarks.length; h++) {
+          const lm = results.multiHandLandmarks[h];
+          const handed = (results.multiHandedness[h] && results.multiHandedness[h].label) ? results.multiHandedness[h].label : 'Right';
+          const fingers = countExtendedFingers(lm, handed);
+
+          if (handed === 'Left') {
+            leftDetected = true;
+            leftFingers = fingers;
+            leftCatch = (fingers === 5);
+            leftPalm.copy(palmCenter(lm));
+          } else {
+            rightDetected = true;
+            const idxTip = lm[8];
+            rightIndex.copy(normToWorld(idxTip.x, idxTip.y));
+          }
+        }
+
+        if (window.wsHands && window.wsHands.readyState === 1 && viewW > 0 && viewH > 0) {
+          window.wsHands.send(JSON.stringify({
+            left: { d: leftDetected, f: leftFingers, p: [leftPalm.x / viewW, leftPalm.y / viewH, 0] },
+            right: { d: rightDetected, f: 0, i: [rightIndex.x / viewW, rightIndex.y / viewH, 0] }
+          }));
+        }
+      });
+
+      if (broadcastHands) {
+        const relayUrl = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + (location.hostname || 'localhost') + ':8765';
+        window.wsHands = new WebSocket(relayUrl);
+        window.wsHands.onopen = () => {
+          console.log('Hands relay: enviando a', relayUrl);
+          const el = document.getElementById('relay-status');
+          if (el) { el.style.display = 'block'; el.textContent = 'Enviando al relé ✓'; }
+        };
+        window.wsHands.onerror = () => {};
+        window.wsHands.onclose = () => {
+          const el = document.getElementById('relay-status');
+          if (el) { el.style.display = 'block'; el.textContent = 'Relé desconectado'; el.style.color = '#ff6666'; }
+        };
+      }
+
+      const cam = new Camera(video, {
+        onFrame: async () => { await hands.send({ image: video }); },
+        width: 1280,
+        height: 720
+      });
+      cam.start().catch((e) => console.warn('Camera start failed:', e));
+
+      function applyPlanarRepulsion(dt) {
+        const hx = rightIndexSmoothed.x;
+        const hy = rightIndexSmoothed.y;
+        const touchR = 100;
+        const r2 = touchR * touchR;
+        let touched = 0;
+
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const i3 = i * 3;
+          const px = positions[i3 + 0];
+          const py = positions[i3 + 1];
+          const dx = px - hx;
+          const dy = py - hy;
+          const d2 = dx * dx + dy * dy;
+
+          if (d2 < r2) {
+            touched++;
+            const d = Math.sqrt(d2) + 1e-6;
+            const falloff = 1.0 - (d / touchR);
+            const fx = (dx / d) * falloff * REPULSE_STRENGTH * 180;
+            const fy = (dy / d) * falloff * REPULSE_STRENGTH * 180;
+            velocities[i3 + 0] += fx * dt;
+            velocities[i3 + 1] += fy * dt;
+          }
+        }
+        if (touched > 20) scatterPulse = 1.0;
+      }
+
+      function applyScatterImpulse(dt) {
+        if (scatterPulse <= 0) return;
+        scatterPulse = Math.max(0, scatterPulse - dt * 3.0);
+        const hx = rightIndexSmoothed.x;
+        const hy = rightIndexSmoothed.y;
+        const blastR = 180;
+        const r2 = blastR * blastR;
+
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const i3 = i * 3;
+          const px = positions[i3 + 0];
+          const py = positions[i3 + 1];
+          const dx = px - hx;
+          const dy = py - hy;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < r2) {
+            const d = Math.sqrt(d2) + 1e-6;
+            const fall = 1.0 - (d / blastR);
+            const impulse = SCATTER_IMPULSE * fall * (0.4 + 0.6 * scatterPulse);
+            velocities[i3 + 0] += (dx / d) * impulse * 110;
+            velocities[i3 + 1] += (dy / d) * impulse * 110;
+          }
+        }
+      }
+
+      function stepParticles(dt) {
+        const k = LERP_RETURN;
+        const damp = Math.exp(-dt * 6.2);
+
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const i3 = i * 3;
+          const px = positions[i3 + 0];
+          const py = positions[i3 + 1];
+          const pz = positions[i3 + 2];
+          const tx = targets[i3 + 0];
+          const ty = targets[i3 + 1];
+          const tz = targets[i3 + 2];
+
+          velocities[i3 + 0] += (tx - px) * k;
+          velocities[i3 + 1] += (ty - py) * k;
+          velocities[i3 + 2] += (tz - pz) * k;
+          velocities[i3 + 0] *= damp;
+          velocities[i3 + 1] *= damp;
+          velocities[i3 + 2] *= damp;
+
+          positions[i3 + 0] = px + velocities[i3 + 0] * dt * 60;
+          positions[i3 + 1] = py + velocities[i3 + 1] * dt * 60;
+          positions[i3 + 2] = pz + velocities[i3 + 2] * dt * 60;
+        }
+        geometry.attributes.position.needsUpdate = true;
+      }
+
+      let lastT = performance.now();
+      let acc = 0, frames = 0, fps = 0;
+
+      function animate(now) {
+        const dt = Math.min(0.033, (now - lastT) / 1000);
+        lastT = now;
+
+        acc += dt;
+        frames++;
+        if (acc >= 0.25) {
+          fps = Math.round(frames / acc);
+          frames = 0;
+          acc = 0;
+          $fps.textContent = String(fps);
+        }
+
+        rightIndexSmoothed.lerp(rightIndex, 1 - Math.pow(1 - SMOOTH_LERP, dt * 60));
+        rightVel.copy(rightIndexSmoothed).sub(rightPrev);
+        rightPrev.copy(rightIndexSmoothed);
+        rightIndex.z = 0;
+
+        const pulseScale = 1 + PULSE_AMP * Math.sin(now * PULSE_FREQ);
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const i3 = i * 3;
+          targets[i3 + 0] = baseTargets[i3 + 0] * pulseScale + HEART_OFFSET_X;
+          targets[i3 + 1] = baseTargets[i3 + 1] * pulseScale + HEART_OFFSET_Y;
+          targets[i3 + 2] = baseTargets[i3 + 2] * pulseScale;
+        }
+
+        if (rightDetected) {
+          applyPlanarRepulsion(dt);
+          applyScatterImpulse(dt);
+        }
+
+        stepParticles(dt);
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>

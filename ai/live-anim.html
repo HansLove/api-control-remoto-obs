@@ -1,7 +1,8 @@
+```html
 <!doctype html>
 <html lang="en">
 <head>
-  <!-- OBS: Añadir como Fuente Navegador. URL opcionales: ?obs=1 (oculta HUD) ?presentation=1 ?transparent=1 -->
+  <!-- OBS: Fuente Navegador. ?broadcast=1 = cámara + envía manos; activa "Usar fondo transparente" en propiedades de la fuente. ?obs=1 oculta HUD, ?transparent=0 quita transparencia. -->
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Cyberpunk Hand-Driven Particle HUD · OBS</title>
@@ -14,7 +15,7 @@
   <style>
     :root{
       --cyan:#00ffff;
-      --bg:#000000;
+      --bg:transparent; /* default transparent for OBS overlay */
     }
     html,body{
       margin:0; height:100%; background:var(--bg); overflow:hidden;
@@ -126,7 +127,10 @@
     /* OBS / Presentación: ocultar HUD para transmisión limpia */
     body.obs-mode #hud,
     body.obs-mode #hint { display: none !important; }
+    /* Fondo transparente para overlay en OBS (?transparent=1 o ?broadcast=1) */
+    body.transparent,
     body.obs-mode.transparent { background: transparent !important; }
+    html.transparent { background: transparent !important; }
   </style>
 </head>
 
@@ -157,7 +161,9 @@
       </div>
     </div>
 
-    <div id="hint">Mano izq: 1–4 dedos = figura 3D (cubo, esfera, toro, cono). Palma abierta = CATCH. Mano der: puño = tocar. Palma abierta = NEBULA. Ambas abiertas = pelota. Paz (2) = siguiente objeto flotante.</div>
+    <div id="hint">Mano izq: 1–4 dedos = figura 3D (cubo, esfera, toro, cono). Palma abierta = CATCH. Mano der: puño = tocar. Palma abierta = NEBULA. Ambas abiertas = pelota. Paz (2) = siguiente objeto flotante. Tecla C = RECENTER.</div>
+
+    <div id="relay-status" style="display:none; position:absolute; top:14px; left:50%; transform:translateX(-50%); color:#00ff88; font-size:12px; letter-spacing:0.1em; padding:8px 14px; border-radius:999px; border:1px solid rgba(0,255,136,0.4); background:rgba(0,0,0,0.5); pointer-events:none;">Enviando al relé ✓</div>
 
     <video id="cam" playsinline></video>
   </div>
@@ -180,19 +186,24 @@
       }
       if (urlParams.get('transparent') === '1') {
         document.body.classList.add('transparent');
+        document.documentElement.classList.add('transparent');
       }
       const broadcastHands = urlParams.get('broadcast') === '1';
+      // Con broadcast=1 usar fondo transparente por defecto (overlay en OBS). ?transparent=0 lo desactiva.
+      if (broadcastHands && urlParams.get('transparent') !== '0') {
+        document.body.classList.add('transparent');
+        document.documentElement.classList.add('transparent');
+      }
 
       // =========================
       // CONFIG: Mano izquierda 1–4 dedos. Cada slot: shape (figura 3D) o text (texto personalizado).
-      // Edita aquí para cambiar figuras o poner tu propio texto.
       // =========================
       const CONFIG = {
         leftSlots: [
-          { type: 'shape', shape: 'cube', color: 0x00FFFF },
+          { type: 'shape', shape: 'cube',   color: 0x00FFFF },
           { type: 'shape', shape: 'sphere', color: 0xFFFF00 },
-          { type: 'shape', shape: 'torus', color: 0xFF00FF },
-          { type: 'shape', shape: 'cone', color: 0x00FF88 }
+          { type: 'shape', shape: 'torus',  color: 0xFF00FF },
+          { type: 'shape', shape: 'cone',   color: 0x00FF88 }
           // Ejemplo con texto: { type: 'text', text: 'Hola', color: 0x00FF88 }
         ]
       };
@@ -211,10 +222,10 @@
       const RIPPLE_AMP       = 18.0;
 
       // Colors
-      const C_NEON_BLUE   = 0x00FFFF; // requested (Neon Blue in spec)
-      const C_NEON_YELLOW = 0xFFFF00;
-      const C_NEON_PINK   = 0xFF00FF;
-      const C_NEON_GREEN  = 0x00FF88;
+      const C_NEON_BLUE    = 0x00FFFF;
+      const C_NEON_YELLOW  = 0xFFFF00;
+      const C_NEON_PINK    = 0xFF00FF;
+      const C_NEON_GREEN   = 0x00FF88;
       const C_BBALL_ORANGE = 0xFF8A00;
 
       // =========================
@@ -248,14 +259,14 @@
 
       const scene = new THREE.Scene();
 
-      // Camera: Perspective for nebula depth; keep most interactions planar (z=0 in text).
+      // Camera
       const camera = new THREE.PerspectiveCamera(55, 1, 1, 5000);
       camera.position.set(0, 0, 1100);
       camera.lookAt(0,0,0);
 
       // Resize
       let vw = 1, vh = 1;
-      let viewW = 1200, viewH = 700; // world-space plane size for mapping hands/text
+      let viewW = 1200, viewH = 700; // world-space plane size
       function resize(){
         vw = window.innerWidth;
         vh = window.innerHeight;
@@ -263,9 +274,8 @@
         camera.aspect = vw / vh;
         camera.updateProjectionMatrix();
 
-        // Keep a consistent world plane relative to camera distance.
-        // For a given camera fov and z, compute visible plane height at z=0.
-        const dist = camera.position.z; // to origin
+        // compute visible plane size at z=0
+        const dist = camera.position.z;
         const fovRad = camera.fov * Math.PI / 180;
         viewH = 2 * Math.tan(fovRad / 2) * dist;
         viewW = viewH * camera.aspect;
@@ -281,7 +291,6 @@
       const targets = new Float32Array(PARTICLE_COUNT * 3);
       const colors = new Float32Array(PARTICLE_COUNT * 3);
 
-      // Per-particle phase/random for ripple/bounce
       const phase = new Float32Array(PARTICLE_COUNT);
       const seed  = new Float32Array(PARTICLE_COUNT);
 
@@ -304,7 +313,6 @@
         targets[i3+1] = ry;
         targets[i3+2] = 0;
 
-        // Default cyan-ish glow
         colors[i3+0] = 0.0;
         colors[i3+1] = 1.0;
         colors[i3+2] = 1.0;
@@ -354,7 +362,7 @@
         new THREE.Mesh(presGeo.sphere, wireMat(C_NEON_PINK)),
         new THREE.Mesh(presGeo.torus, wireMat(C_NEON_YELLOW))
       ];
-      presMeshes.forEach((m, i) => {
+      presMeshes.forEach((m) => {
         m.visible = false;
         m.position.set(0, 0, -200);
         m.rotation.order = 'YXZ';
@@ -414,7 +422,6 @@
             z = (R + r * Math.cos(v)) * Math.sin(u);
           } else if (shapeName === 'cone') {
             const t = i / N;
-            const h = 1 - t;
             const rad = 1 - t * 0.999;
             const angle = (i * 137.5 * Math.PI / 180) + t * 10;
             x = rad * Math.cos(angle);
@@ -499,13 +506,24 @@
       // =========================
       // Modes & State
       // =========================
-      const MODE_MAIN = 0;   // figuras 3D o texto (según CONFIG)
+      const MODE_MAIN = 0;
       const MODE_NEBULA = 1;
       const MODE_ULT = 2;
 
       let mode = MODE_MAIN;
 
       const SMOOTH_LERP = 0.35;
+
+      // =========================
+      // Center calibration (hand->world offset)
+      // =========================
+      let centerOffset = new THREE.Vector3(0, 0, 0);
+      let calibrated = false;
+      function calibrateCenter(){
+        centerOffset.set(-rightIndexSmoothed.x, -rightIndexSmoothed.y, 0);
+        calibrated = true;
+      }
+      let didAutoCalibrate = false;
 
       // Left hand: command controller
       let leftDetected = false;
@@ -523,29 +541,27 @@
       let rightVel = new THREE.Vector3(0,0,0);
 
       // Scatter timers
-      let scatterPulse = 0; // when touching text, stronger impulse
+      let scatterPulse = 0;
 
-      // Nebula: target field
+      // Nebula: centered radial targets
       function setNebulaTargets(){
+        const R = Math.min(viewW, viewH) * 0.52;
         for (let i=0;i<PARTICLE_COUNT;i++){
           const i3 = i*3;
-          targets[i3+0] = (Math.random()-0.5) * viewW * 1.05;
-          targets[i3+1] = (Math.random()-0.5) * viewH * 1.05;
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.sqrt(Math.random()) * R;
+          targets[i3+0] = Math.cos(a) * r;
+          targets[i3+1] = Math.sin(a) * r;
           targets[i3+2] = (Math.random()-0.5) * NEBULA_DEPTH;
         }
       }
 
       // =========================
-      // Basketball (Fibonacci sphere + "black lines" texture)
+      // Basketball
       // =========================
-      const bball = {
-        radius: 160,
-        rot: 0
-      };
+      const bball = { radius: 160, rot: 0 };
 
       function setBasketballTargets(palmWorld){
-        // Fibonacci sphere distribution for points on a sphere
-        // plus a simple "black lines" pattern by coloring points near certain bands.
         const N = PARTICLE_COUNT;
         const golden = Math.PI * (3 - Math.sqrt(5));
         const [or,og,ob] = hexToRgb01(C_BBALL_ORANGE);
@@ -553,22 +569,19 @@
         for (let i=0;i<N;i++){
           const i3 = i*3;
 
-          const y = 1 - (i / (N - 1)) * 2; // 1..-1
-          const r = Math.sqrt(Math.max(0, 1 - y*y));
+          const y = 1 - (i / (N - 1)) * 2;
+          const rr = Math.sqrt(Math.max(0, 1 - y*y));
           const theta = golden * i;
 
-          const x = Math.cos(theta) * r;
-          const z = Math.sin(theta) * r;
+          const x = Math.cos(theta) * rr;
+          const z = Math.sin(theta) * rr;
 
-          // sphere point
           targets[i3+0] = palmWorld.x + x * bball.radius;
           targets[i3+1] = palmWorld.y + y * bball.radius;
           targets[i3+2] = palmWorld.z + z * bball.radius;
 
-          // "ball lines": darken points near a few great-circle bands
-          // (approx texture—looks like seams when rotating)
-          const lat = Math.asin(y); // -pi/2..pi/2
-          const lon = Math.atan2(z, x); // -pi..pi
+          const lat = Math.asin(y);
+          const lon = Math.atan2(z, x);
 
           const band1 = Math.abs(Math.sin(lon * 2.0)) < 0.08 ? 1 : 0;
           const band2 = Math.abs(Math.sin(lat * 3.0)) < 0.08 ? 1 : 0;
@@ -576,21 +589,16 @@
           const seam = (band1 || band2 || band3);
 
           if (seam){
-            colors[i3+0] = 0.05;
-            colors[i3+1] = 0.05;
-            colors[i3+2] = 0.05;
+            colors[i3+0] = 0.05; colors[i3+1] = 0.05; colors[i3+2] = 0.05;
           } else {
-            colors[i3+0] = or;
-            colors[i3+1] = og;
-            colors[i3+2] = ob;
+            colors[i3+0] = or; colors[i3+1] = og; colors[i3+2] = ob;
           }
         }
         geometry.attributes.color.needsUpdate = true;
       }
 
-      // Rotate basketball targets around palm center (cheap: rotate target vectors)
       function rotateBasketballTargets(palmWorld, dt){
-        bball.rot += dt * 1.4; // rotation speed
+        bball.rot += dt * 1.4;
         const s = Math.sin(bball.rot);
         const c = Math.cos(bball.rot);
 
@@ -600,7 +608,6 @@
           const ty = targets[i3+1] - palmWorld.y;
           const tz = targets[i3+2] - palmWorld.z;
 
-          // rotate around Y axis + slight X wobble for cyber feel
           const rx = ( tx * c + tz * s );
           const rz = ( -tx * s + tz * c );
 
@@ -619,14 +626,13 @@
       // Hand Utilities (Finger Counting + Mapping)
       // =========================
       function normToWorld(u, v){
-        // Mirror horizontally for more "selfie" feel
-        const x = ( (1 - u) - 0.5 ) * viewW;
-        const y = ( 0.5 - v ) * viewH;
+        // mirror horizontally + apply calibration offset
+        const x = (((1 - u) - 0.5) * viewW) + (calibrated ? centerOffset.x : 0);
+        const y = (((0.5 - v) * viewH) + (calibrated ? centerOffset.y : 0));
         return new THREE.Vector3(x,y,0);
       }
 
       function palmCenter(landmarks){
-        // Average of wrist (0), index MCP (5), pinky MCP (17)
         const a = landmarks[0], b = landmarks[5], c = landmarks[17];
         const u = (a.x + b.x + c.x) / 3;
         const v = (a.y + b.y + c.y) / 3;
@@ -634,7 +640,6 @@
       }
 
       function countExtendedFingers(landmarks, handednessLabel){
-        // Simple: tip.y < pip.y => extended (cámara: y hacia abajo)
         let count = 0;
         const tips = [4,8,12,16,20];
         const pips = [3,6,10,14,18];
@@ -653,12 +658,6 @@
           if (tip.y < pip.y) count++;
         }
         return count;
-      }
-
-      function rightHandIsPointingOrFist(fingers){
-        // Default state A includes pointing or fist.
-        // We'll treat "not open palm" as state A.
-        return fingers < 5;
       }
 
       // =========================
@@ -707,7 +706,15 @@
           }
         }
 
-        // Relé OBS: enviar manos (coords normalizadas para que el overlay escale con su view)
+        // Auto-calibrate once when right hand appears
+        if (rightDetected && !didAutoCalibrate) {
+          rightIndexSmoothed.copy(rightIndex);
+          rightPrev.copy(rightIndexSmoothed);
+          calibrateCenter();
+          didAutoCalibrate = true;
+        }
+
+        // Relé OBS: enviar manos (coords normalizadas)
         if (window.wsHands && window.wsHands.readyState === 1 && viewW > 0 && viewH > 0) {
           window.wsHands.send(JSON.stringify({
             left: { d: leftDetected, f: leftFingers, p: [leftPalm.x/viewW, leftPalm.y/viewH, 0] },
@@ -719,26 +726,36 @@
       if (broadcastHands) {
         const relayUrl = (location.protocol === "https:" ? "wss:" : "ws:") + "//" + (location.hostname || "localhost") + ":8765";
         window.wsHands = new WebSocket(relayUrl);
-        window.wsHands.onopen = () => console.log("Hands relay: enviando a", relayUrl);
+        window.wsHands.onopen = () => {
+          console.log("Hands relay: enviando a", relayUrl);
+          const el = document.getElementById("relay-status");
+          if (el) { el.style.display = "block"; el.textContent = "Enviando al relé ✓"; }
+        };
         window.wsHands.onerror = () => {};
+        window.wsHands.onclose = () => {
+          const el = document.getElementById("relay-status");
+          if (el) { el.style.display = "block"; el.textContent = "Relé desconectado"; el.style.color = "#ff6666"; }
+        };
       }
 
       const cam = new Camera(video, {
-        onFrame: async () => {
-          await hands.send({image: video});
-        },
-        // No mobile constraints requested: default webcam settings.
+        onFrame: async () => { await hands.send({image: video}); },
         width: 1280,
         height: 720
       });
 
-      // Try start camera quickly
-      cam.start().catch((e) => {
-        console.warn("Camera start failed:", e);
+      cam.start().catch((e) => console.warn("Camera start failed:", e));
+
+      // Hotkey: C to recenter based on current right hand
+      window.addEventListener('keydown', (e) => {
+        if (e.key.toLowerCase() === 'c') {
+          calibrateCenter();
+          console.log("Recenter calibrated (C)");
+        }
       });
 
       // =========================
-      // Command: mano izquierda 1–4 dedos → slot de CONFIG
+      // Left Command: 1–4 fingers -> slot
       // =========================
       function applyLeftCommand(fingers){
         if (fingers < 1 || fingers > 4) return;
@@ -756,23 +773,20 @@
       // =========================
       function clamp(v, a, b){ return Math.max(a, Math.min(b, v)); }
 
-      // Right-hand planar repulsion in TEXT mode (usa posición suavizada)
       function applyPlanarRepulsion(dt){
         const hx = rightIndexSmoothed.x;
         const hy = rightIndexSmoothed.y;
 
-        const touchR = 95; // touch radius in world units
+        const touchR = 95;
         const r2 = touchR * touchR;
 
-        // If close to many text particles, trigger scatter pulse
         let touched = 0;
 
         for (let i=0;i<PARTICLE_COUNT;i++){
           const i3 = i*3;
-
           const px = positions[i3+0];
           const py = positions[i3+1];
-          // planar only: ignore z for interaction
+
           const dx = px - hx;
           const dy = py - hy;
           const d2 = dx*dx + dy*dy;
@@ -783,16 +797,12 @@
             const falloff = 1.0 - (d / touchR);
             const fx = (dx / d) * falloff * REPULSE_STRENGTH * 180;
             const fy = (dy / d) * falloff * REPULSE_STRENGTH * 180;
-
-            // No z bulge: keep velocities z mostly unaffected
             velocities[i3+0] += fx * dt;
             velocities[i3+1] += fy * dt;
           }
         }
 
-        if (touched > 18){
-          scatterPulse = 1.0; // trigger strong scatter
-        }
+        if (touched > 18) scatterPulse = 1.0;
       }
 
       function applyScatterImpulse(dt){
@@ -818,7 +828,6 @@
             const impulse = SCATTER_IMPULSE * fall * (0.4 + 0.6*scatterPulse);
             velocities[i3+0] += (dx / d) * impulse * 120;
             velocities[i3+1] += (dy / d) * impulse * 120;
-            // keep flat: do not push z
           }
         }
       }
@@ -848,11 +857,8 @@
           if (d2 < r2){
             const d = Math.sqrt(d2) + 1e-6;
             const fall = 1.0 - (d / influenceR);
-
-            // Water ripple: sine wave displacing velocity, in direction perpendicular-ish to motion
             const wave = Math.sin((d * RIPPLE_FREQ) - (t * 10.0)) * RIPPLE_AMP * fall * speed;
 
-            // Use rightVel direction to create a swirling disturbance
             const vx = rightVel.x, vy = rightVel.y;
             const vlen = Math.sqrt(vx*vx + vy*vy) + 1e-6;
             const nx = -vy / vlen;
@@ -865,21 +871,16 @@
         }
       }
 
-      // Ultimate attraction + bouncing beads trajectory
       function applyUltimateBouncingAttraction(dt, t){
-        // Strong attraction to targets (basketball around left palm),
-        // plus energetic vertical bounce (high-frequency sine).
-        const bounceFreq = 28.0;     // high-frequency bounce
-        const bounceAmp  = 22.0;     // amplitude
-        const attractGain = 2.6;     // strong pull
+        const bounceFreq = 28.0;
+        const bounceAmp  = 22.0;
+        const attractGain = 2.6;
 
         for (let i=0;i<PARTICLE_COUNT;i++){
           const i3 = i*3;
 
-          // Bouncing Y trajectory overlaid (looks like energetic beads)
           const bounce = Math.sin((t * bounceFreq) + phase[i] * 2.2 + seed[i]*8.0) * bounceAmp;
 
-          // Pull toward rotating ball targets
           const tx = targets[i3+0];
           const ty = targets[i3+1] + bounce;
           const tz = targets[i3+2];
@@ -898,12 +899,8 @@
         }
       }
 
-      // Integrate + Return to Targets
       function stepParticles(dt){
-        // Fast return via lerp-ish acceleration toward targets
         const k = LERP_RETURN;
-
-        // A bit of damping to keep it tight
         const damp = Math.exp(-dt * 6.5);
 
         for (let i=0;i<PARTICLE_COUNT;i++){
@@ -917,12 +914,10 @@
           const ty = targets[i3+1];
           const tz = targets[i3+2];
 
-          // spring-ish pull toward target
           velocities[i3+0] += (tx - px) * k;
           velocities[i3+1] += (ty - py) * k;
           velocities[i3+2] += (tz - pz) * k;
 
-          // damping
           velocities[i3+0] *= damp;
           velocities[i3+1] *= damp;
           velocities[i3+2] *= damp;
@@ -954,22 +949,23 @@
         }
         $dt.textContent = String(Math.round(dt*1000));
 
-        // Suavizado del índice (menos saltos al mover la mano)
+        // Smooth index
         rightIndexSmoothed.lerp(rightIndex, 1 - Math.pow(1 - SMOOTH_LERP, dt * 60));
         rightVel.copy(rightIndexSmoothed).sub(rightPrev);
         rightPrev.copy(rightIndexSmoothed);
 
-        // Update HUD hand statuses
+        // HUD statuses
         $lh.textContent = leftDetected ? (leftCatch ? "OPEN" : `${leftFingers}F`) : "--";
         $rh.textContent = rightDetected ? (rightOpen ? "OPEN" : "TRACK") : "--";
 
-        // Gestos presentación 3D: paz (2 dedos) = siguiente objeto, puño (0) = ocultar
+        // Presentation gestures: peace (2) next, fist (0) hide
         if (rightFingers === 2 && prevRightFingersForPres !== 2) {
           currentPresIndex = (currentPresIndex + 1) % presMeshes.length;
           updatePresentationObject(true, currentPresIndex);
         }
         if (rightFingers === 0) updatePresentationObject(false, currentPresIndex);
         prevRightFingersForPres = rightFingers;
+
         presMeshes[currentPresIndex].rotation.y += dt * 0.8;
         presMeshes[currentPresIndex].rotation.x += dt * 0.3;
 
@@ -978,7 +974,7 @@
           applyLeftCommand(leftFingers);
         }
 
-        // Mode decisions (Nebula / Ultimate)
+        // Modes
         const nebulaActive = rightDetected && rightOpen;
         const catchActive  = leftDetected && leftCatch;
         const ultimateActive = nebulaActive && catchActive;
@@ -992,9 +988,7 @@
             $cmd.textContent = "BASKETBALL";
             $cmd.className = "value warn";
 
-            // Snap right index z to 0 for consistent mapping
             rightIndex.z = 0;
-
             setBasketballTargets(leftPalm);
           }
         } else if (nebulaActive){
@@ -1023,39 +1017,27 @@
           }
         }
 
-        // =========================
         // Interactions
-        // =========================
         if (rightDetected){
           if (mode === MODE_MAIN){
-            // Planar-only repulsion + touch scatter
             applyPlanarRepulsion(dt);
             applyScatterImpulse(dt);
-
-            // Keep interaction planar by forcing rightIndex.z = 0
             rightIndex.z = 0;
           } else if (mode === MODE_NEBULA){
-            // Ripple when hand moves through particles
             rightIndex.z = 0;
             applyNebulaRipple(dt, now/1000);
           } else if (mode === MODE_ULT){
-            // Pull everything into left palm to form rotating ball
             rotateBasketballTargets(leftPalm, dt);
             applyUltimateBouncingAttraction(dt, now/1000);
           }
         }
 
-        // Dual-hand ultimate: left palm is destination container; already handled.
-        // If in ULT but left hand drops out, fallback quickly:
         if (mode === MODE_ULT && !ultimateActive){
-          mode = MODE_NEBULA; // if right still open it will remain nebula; else will go text next tick
+          mode = MODE_NEBULA;
         }
 
-        // Integrate and return
         stepParticles(dt);
-
         renderer.render(scene, camera);
-
         requestAnimationFrame(animate);
       }
       requestAnimationFrame(animate);
@@ -1063,8 +1045,8 @@
       // =========================
       // Tiny Safety: if no camera permission, still show animation.
       // =========================
-      // (No blocking UI; the particles still run.)
     })();
   </script>
 </body>
 </html>
+```

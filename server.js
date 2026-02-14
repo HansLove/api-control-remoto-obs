@@ -56,6 +56,10 @@ app.use(express.json({ limit: "1mb" }));
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 if (fs.existsSync(PUBLIC_DIR)) app.use(express.static(PUBLIC_DIR));
 
+// Serve AI hand-driven overlay from ./ai (live-anim, live-anim-obs)
+const AI_DIR = path.join(process.cwd(), "ai");
+if (fs.existsSync(AI_DIR)) app.use("/ai", express.static(AI_DIR));
+
 // Convenience routes (expects public/control-remoto.html and public/overlay.html)
 app.get("/control", (req, res) => {
   const p = path.join(PUBLIC_DIR, "control-remoto.html");
