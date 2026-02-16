@@ -221,6 +221,10 @@
       const RIPPLE_FREQ      = 0.045;
       const RIPPLE_AMP       = 18.0;
 
+      // Centrado en pantalla: offset de la figura (si se ve abajo-derecha, usar negativo X y positivo Y)
+      const SCENE_OFFSET_X = -500;
+      const SCENE_OFFSET_Y = 200;
+
       // Colors
       const C_NEON_BLUE    = 0x00FFFF;
       const C_NEON_YELLOW  = 0xFFFF00;
@@ -910,8 +914,8 @@
           const py = positions[i3+1];
           const pz = positions[i3+2];
 
-          const tx = targets[i3+0];
-          const ty = targets[i3+1];
+          const tx = targets[i3+0] + SCENE_OFFSET_X;
+          const ty = targets[i3+1] + SCENE_OFFSET_Y;
           const tz = targets[i3+2];
 
           velocities[i3+0] += (tx - px) * k;

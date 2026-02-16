@@ -112,6 +112,56 @@
       pointer-events: none;
     }
 
+    /* Mensajes grandes: no opacan el corazón, solo acompañan */
+    #mensajes {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+    }
+    #mensajes .frase {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: clamp(2.8rem, 10vw, 6.5rem);
+      font-weight: 700;
+      color: rgba(255, 64, 129, 0.28);
+      text-shadow: 0 0 40px rgba(255, 64, 129, 0.2);
+      letter-spacing: 0.02em;
+      text-align: center;
+      max-width: 90%;
+      line-height: 1.15;
+      opacity: 0;
+      transition: opacity 1.8s ease-in-out;
+      white-space: pre-line;
+    }
+    #mensajes .frase.visible {
+      opacity: 1;
+    }
+
+    /* Vibe: letras flotantes tipo código */
+    #vibe-letters {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 1;
+    }
+    #vibe-letters .char {
+      position: absolute;
+      font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+      font-weight: 600;
+      font-size: clamp(14px, 2.2vw, 28px);
+      white-space: nowrap;
+      text-shadow: 0 0 20px currentColor;
+      will-change: transform, opacity;
+      opacity: 0;
+    }
+
     body.obs-mode #hud,
     body.obs-mode #hint { display: none !important; }
     body.transparent,
@@ -134,6 +184,9 @@
 
     <div id="hint">Acerca las manos al corazón para que reaccione. ¡Energía, amor y mucho éxito!</div>
     <div id="relay-status">Enviando al relé ✓</div>
+
+    <div id="mensajes" aria-hidden="true"></div>
+    <div id="vibe-letters" aria-hidden="true"></div>
     <video id="cam" playsinline></video>
   </div>
 
@@ -162,12 +215,14 @@
       const HEART_OFFSET_X = -435;
       const HEART_OFFSET_Y = 275;
       const PARTICLE_SIZE = 2.6;
-      const LERP_RETURN = 0.14;
+      const LERP_RETURN = 0.12;
       const REPULSE_STRENGTH = 1.9;
       const SCATTER_IMPULSE = 3.0;
       const SMOOTH_LERP = 0.35;
-      const PULSE_AMP = 0.06;
-      const PULSE_FREQ = 0.0022;
+      const PULSE_AMP = 0.08;
+      const PULSE_FREQ = 0.0018;
+      const SWAY_AMP = 18;
+      const SWAY_FREQ = 0.0007;
 
       const C_ROSE = 0xe91e63;
       const C_PINK = 0xff4081;
@@ -175,6 +230,53 @@
 
       const $fps = document.getElementById('fps');
       const $mode = document.getElementById('mode');
+
+      const FRASES = [
+        'Amor y amistad',
+        'Feliz día del amor',
+        'Gracias por estar',
+        'Vibe coding\ncon corazón',
+        'Pensamientos que unen',
+        'Celebramos juntos',
+        'Con cariño',
+        'La amistad es amor elegido'
+      ];
+      const $mensajes = document.getElementById('mensajes');
+      FRASES.forEach((texto, i) => {
+        const el = document.createElement('div');
+        el.className = 'frase';
+        el.setAttribute('data-index', i);
+        el.textContent = texto;
+        $mensajes.appendChild(el);
+      });
+      let fraseIndex = 0;
+      let fraseLastChange = 0;
+      const FRASE_DURATION_MS = 4800;
+      $mensajes.querySelector('.frase')?.classList.add('visible');
+
+      // Vibe: letras flotantes sensuales
+      const VIBE_TOKENS = ['const', '=>', '{}', '()', 'let', 'fn', 'async', '·', 'x', 'y', 'i', '...', 'return', 'true', 'null', '=>', '[]', 'map', 'filter', '✨', 'λ', '→'];
+      const VIBE_COLORS = ['#ff4081', '#e91e63', '#ff1744', '#f48fb1', '#ce93d8', '#b39ddb', '#80cbc4', '#ffab91', '#ffcc80'];
+      const $vibe = document.getElementById('vibe-letters');
+      const vibeLetters = [];
+      const VIBE_COUNT = 32;
+      for (let i = 0; i < VIBE_COUNT; i++) {
+        const el = document.createElement('span');
+        el.className = 'char';
+        el.textContent = VIBE_TOKENS[i % VIBE_TOKENS.length];
+        el.style.color = VIBE_COLORS[i % VIBE_COLORS.length];
+        $vibe.appendChild(el);
+        const phaseX = Math.random() * Math.PI * 2;
+        const phaseY = Math.random() * Math.PI * 2;
+        const phaseO = Math.random() * Math.PI * 2;
+        const speedX = 0.00015 + Math.random() * 0.0002;
+        const speedY = 0.00012 + Math.random() * 0.00018;
+        const radiusX = 80 + Math.random() * 180;
+        const radiusY = 60 + Math.random() * 140;
+        const baseX = (Math.random() - 0.5) * 100;
+        const baseY = (Math.random() - 0.5) * 80;
+        vibeLetters.push({ el, phaseX, phaseY, phaseO, speedX, speedY, radiusX, radiusY, baseX, baseY });
+      }
 
       const canvas = document.getElementById('gl');
       const useTransparent = document.body.classList.contains('transparent');
@@ -512,12 +614,37 @@
         rightIndex.z = 0;
 
         const pulseScale = 1 + PULSE_AMP * Math.sin(now * PULSE_FREQ);
+        const swayX = SWAY_AMP * Math.sin(now * SWAY_FREQ);
+        const swayY = SWAY_AMP * 0.6 * Math.sin(now * SWAY_FREQ * 0.9 + 0.7);
+        const offX = HEART_OFFSET_X + swayX;
+        const offY = HEART_OFFSET_Y + swayY;
         for (let i = 0; i < PARTICLE_COUNT; i++) {
           const i3 = i * 3;
-          targets[i3 + 0] = baseTargets[i3 + 0] * pulseScale + HEART_OFFSET_X;
-          targets[i3 + 1] = baseTargets[i3 + 1] * pulseScale + HEART_OFFSET_Y;
+          targets[i3 + 0] = baseTargets[i3 + 0] * pulseScale + offX;
+          targets[i3 + 1] = baseTargets[i3 + 1] * pulseScale + offY;
           targets[i3 + 2] = baseTargets[i3 + 2] * pulseScale;
         }
+
+        if (now - fraseLastChange >= FRASE_DURATION_MS) {
+          fraseLastChange = now;
+          fraseIndex = (fraseIndex + 1) % FRASES.length;
+          Array.from($mensajes.querySelectorAll('.frase')).forEach((el, i) => {
+            el.classList.toggle('visible', i === fraseIndex);
+          });
+        }
+
+        // Vibe: drift sensual de letras
+        vibeLetters.forEach((v) => {
+          const px = 50 + (v.baseX + v.radiusX * Math.sin(v.phaseX + now * v.speedX)) * (100 / viewW);
+          const py = 50 + (v.baseY + v.radiusY * Math.cos(v.phaseY + now * v.speedY)) * (100 / viewH);
+          const op = 0.48 + 0.4 * Math.sin(v.phaseO + now * 0.0009);
+          const scale = 0.94 + 0.1 * Math.sin(now * 0.0007 + v.phaseO);
+          const rot = 2 * Math.sin(now * 0.0005 + v.phaseX) * (Math.PI / 180);
+          v.el.style.left = px + '%';
+          v.el.style.top = py + '%';
+          v.el.style.transform = `translate(-50%, -50%) scale(${scale}) rotate(${rot}rad)`;
+          v.el.style.opacity = String(op);
+        });
 
         if (rightDetected) {
           applyPlanarRepulsion(dt);
