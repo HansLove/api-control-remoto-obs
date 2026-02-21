@@ -482,6 +482,7 @@
   // UI helpers
   // ============================
   function setConn(kind, text){
+    if (!connDot || !connText) return;
     connDot.classList.remove("ok","bad");
     if(kind === "ok") connDot.classList.add("ok");
     if(kind === "bad") connDot.classList.add("bad");
@@ -490,21 +491,22 @@
 
   function setMode(newMode){
     mode = newMode || "cinema";
-    root.classList.remove("mode-minimal");
+    if (root) root.classList.remove("mode-minimal");
+    if (!modeBadge) return;
     modeBadge.className = "badge minimalHide";
     let label = "🎞 Cinema";
     if(mode === "analysis"){ label = "🧩 Analysis"; modeBadge.classList.add("analysis"); }
-    else if(mode === "minimal"){ label = "🫥 Minimal"; root.classList.add("mode-minimal"); modeBadge.classList.add("minimal"); }
+    else if(mode === "minimal"){ if (root) root.classList.add("mode-minimal"); modeBadge.classList.add("minimal"); }
     else { modeBadge.classList.add("cinema"); }
     modeBadge.textContent = label;
     modeBadge.classList.add("show");
-    // auto-hide badge after a few seconds unless in minimal (it will be hidden anyway)
     clearTimeout(setMode._t);
     setMode._t = setTimeout(() => modeBadge.classList.remove("show"), 4500);
   }
 
   function setSpoiler(level){
     spoiler = level || "safe";
+    if (!spoilerBadge) return;
     spoilerBadge.className = "spoiler minimalHide show";
     if(spoiler === "safe"){
       spoilerBadge.classList.add("safe");
@@ -517,8 +519,6 @@
       spoilerBadge.textContent = "☠️ Full Spoilers";
     }
     clearTimeout(setSpoiler._t);
-    // keep visible by default (comment out if you want auto-hide)
-    // setSpoiler._t = setTimeout(() => spoilerBadge.classList.remove("show"), 7000);
   }
 
   function flashStinger(ms=420){
@@ -817,8 +817,12 @@
   }
 
   function forwardSceneToIframe(evt){
-    const f = document.getElementById("sceneFrame");
-    if (f && f.contentWindow) f.contentWindow.postMessage(evt, "*");
+    try {
+      const f = document.getElementById("sceneFrame");
+      if (f && f.contentWindow) f.contentWindow.postMessage(evt, "*");
+    } catch (e) {
+      console.warn("Scene iframe postMessage failed:", e);
+    }
   }
 
   // ============================

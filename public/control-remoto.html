@@ -350,32 +350,41 @@
 
   function updateSeqDisplay() {
     const { step, max, name, label } = state.seq;
-    // For top5: step 1 shows #5, step 5 shows #1
+    const seqNumEl = $("seqNum");
+    const seqLabelEl = $("seqLabel");
+    const seqNameEl = $("seqName");
+    if (!seqNumEl || !seqLabelEl || !seqNameEl) return;
     if (step === 0) {
-      $("seqNum").textContent = "—";
-      $("seqLabel").textContent = "Click Next to start";
+      seqNumEl.textContent = "—";
+      seqLabelEl.textContent = "Click Next to start";
     } else {
       const display = name === "top5" ? `#${max - step + 1}` : step;
-      $("seqNum").textContent = display;
-      $("seqLabel").textContent = label || `Step ${step} of ${max}`;
+      seqNumEl.textContent = display;
+      seqLabelEl.textContent = label || `Step ${step} of ${max}`;
     }
-    $("seqName").textContent = name.toUpperCase().replace("TOP5", "TOP 5");
+    seqNameEl.textContent = name.toUpperCase().replace("TOP5", "TOP 5");
   }
 
   // ========== Settings ==========
   function loadSettings() {
     try {
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
-      if (s.wsUrl) $("wsUrl").value = s.wsUrl;
-      if (s.token) $("token").value = s.token;
-    } catch {}
+      const wsUrlEl = $("wsUrl");
+      const tokenEl = $("token");
+      if (s.wsUrl && wsUrlEl) wsUrlEl.value = s.wsUrl;
+      if (s.token && tokenEl) tokenEl.value = s.token;
+    } catch (_) {}
   }
 
   function saveSettings() {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({
-      wsUrl: $("wsUrl").value.trim(),
-      token: $("token").value.trim()
-    }));
+    try {
+      const wsUrlEl = $("wsUrl");
+      const tokenEl = $("token");
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        wsUrl: (wsUrlEl && wsUrlEl.value) ? wsUrlEl.value.trim() : "",
+        token: (tokenEl && tokenEl.value) ? tokenEl.value.trim() : ""
+      }));
+    } catch (_) {}
   }
 
   // ========== WebSocket ==========
@@ -514,15 +523,20 @@
         escritosGrid.appendChild(btn);
       });
     }
-    $("sendCustomText").onclick = () => {
-      const v = $("customText").value.trim();
-      if (v) sendSceneText(v);
-      else toast("Escribe un texto");
-    };
+    const sendCustomTextBtn = $("sendCustomText");
+    if (sendCustomTextBtn) {
+      sendCustomTextBtn.onclick = () => {
+        const v = ($("customText") && $("customText").value) ? $("customText").value.trim() : "";
+        if (v) sendSceneText(v);
+        else toast("Escribe un texto");
+      };
+    }
 
     // Toast
-    $("sendToast").onclick = sendToast;
-    $("toastMsg").onkeydown = (e) => { if (e.key === "Enter") sendToast(); };
+    const sendToastBtn = $("sendToast");
+    if (sendToastBtn) sendToastBtn.onclick = sendToast;
+    const toastMsgEl = $("toastMsg");
+    if (toastMsgEl) toastMsgEl.onkeydown = (e) => { if (e.key === "Enter") sendToast(); };
 
     // Markers
     document.querySelectorAll("[data-trigger]").forEach(btn => {
@@ -535,29 +549,44 @@
     });
 
     // Sequences
-    $("seqNext").onclick = seqNext;
-    $("seqBack").onclick = seqBack;
-    $("seqReset").onclick = seqReset;
+    const seqNextEl = $("seqNext");
+    if (seqNextEl) seqNextEl.onclick = seqNext;
+    const seqBackEl = $("seqBack");
+    if (seqBackEl) seqBackEl.onclick = seqBack;
+    const seqResetEl = $("seqReset");
+    if (seqResetEl) seqResetEl.onclick = seqReset;
 
     // Dock
-    $("bigHighlight").onclick = () => sendMarker("highlight");
-    $("bigNext").onclick = () => sendMarker("next_segment");
+    const bigHighlightEl = $("bigHighlight");
+    if (bigHighlightEl) bigHighlightEl.onclick = () => sendMarker("highlight");
+    const bigNextEl = $("bigNext");
+    if (bigNextEl) bigNextEl.onclick = () => sendMarker("next_segment");
 
     // Connection panel toggle
-    $("connToggle").onclick = () => {
-      $("connPanel").classList.toggle("open");
-    };
+    const connToggleEl = $("connToggle");
+    if (connToggleEl) {
+      connToggleEl.onclick = () => {
+        const p = $("connPanel");
+        if (p) p.classList.toggle("open");
+      };
+    }
 
     // Connection buttons
-    $("connectBtn").onclick = () => connect();
-    $("disconnectBtn").onclick = () => {
-      if (state.ws) state.ws.close();
-      setStatus(false, "Disconnected");
-    };
+    const connectBtnEl = $("connectBtn");
+    if (connectBtnEl) connectBtnEl.onclick = () => connect();
+    const disconnectBtnEl = $("disconnectBtn");
+    if (disconnectBtnEl) {
+      disconnectBtnEl.onclick = () => {
+        if (state.ws) state.ws.close();
+        setStatus(false, "Disconnected");
+      };
+    }
 
     // Save on input
-    $("wsUrl").onchange = saveSettings;
-    $("token").onchange = saveSettings;
+    const wsUrlEl = $("wsUrl");
+    if (wsUrlEl) wsUrlEl.onchange = saveSettings;
+    const tokenEl = $("token");
+    if (tokenEl) tokenEl.onchange = saveSettings;
   }
 
   // ========== Boot ==========
