@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Escena 3D · Control remoto</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --pink: #ff4081;
+      --rose: #e91e63;
+      --bg: transparent;
+    }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      overflow: hidden;
+      font-family: Quicksand, sans-serif;
+    }
+    #wrap {
+      position: fixed;
+      inset: 0;
+    }
+    canvas#gl {
+      position: absolute;
+      inset: 0;
+      display: block;
+    }
+
+    .overlay {
+      pointer-events: none;
+      position: absolute;
+      inset: 0;
+      mix-blend-mode: screen;
+      opacity: 0.4;
+    }
+    .glow {
+      background: radial-gradient(ellipse 80% 50% at 50% 50%,
+        rgba(255, 64, 129, 0.12) 0%,
+        rgba(233, 30, 99, 0.04) 50%,
+        transparent 70%);
+    }
+
+    /* Mensajes grandes */
+    #mensajes {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 2;
+    }
+    #mensajes .frase {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      font-size: clamp(2.8rem, 10vw, 6.5rem);
+      font-weight: 700;
+      color: rgba(255, 64, 129, 0.28);
+      text-shadow: 0 0 40px rgba(255, 64, 129, 0.2);
+      letter-spacing: 0.02em;
+      text-align: center;
+      max-width: 90%;
+      line-height: 1.15;
+      opacity: 0;
+      transition: opacity 1.8s ease-in-out;
+      white-space: pre-line;
+    }
+    #mensajes .frase.visible {
+      opacity: 1;
+    }
+
+    /* Vibe: letras flotantes */
+    #vibe-letters {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 1;
+    }
+    #vibe-letters .char {
+      position: absolute;
+      font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+      font-weight: 600;
+      font-size: clamp(14px, 2.2vw, 28px);
+      white-space: nowrap;
+      text-shadow: 0 0 20px currentColor;
+      will-change: transform, opacity;
+      opacity: 0;
+    }
+
+    body.transparent,
+    html.transparent { background: transparent !important; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="gl"></canvas>
+    <div class="overlay glow"></div>
+    <div id="mensajes" aria-hidden="true"></div>
+    <div id="vibe-letters" aria-hidden="true"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+  <script>
+    (() => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('transparent') === '1') {
+        document.body.classList.add('transparent');
+        document.documentElement.classList.add('transparent');
+      }
+
+      const PARTICLE_COUNT = 14000;
+      const HEART_SCALE = 160;
+      const SHAPE_SCALE = 140;
+      const HEART_OFFSET_X = -435;
+      const HEART_OFFSET_Y = 275;
+      const PARTICLE_SIZE = 2.6;
+      const LERP_RETURN = 0.12;
+      const PULSE_AMP = 0.08;
+      const PULSE_FREQ = 0.0018;
+      const SWAY_AMP = 18;
+      const SWAY_FREQ = 0.0007;
+
+      const C_ROSE = 0xe91e63;
+      const C_PINK = 0xff4081;
+      const C_HOT = 0xff1744;
+      const C_NEON_BLUE = 0x00FFFF;
+      const C_NEON_YELLOW = 0xFFFF00;
+      const C_NEON_PINK = 0xFF00FF;
+      const C_NEON_GREEN = 0x00FF88;
+
+      const FRASES = [
+        'Amor y amistad',
+        'Feliz día del amor',
+        'Gracias por estar',
+        'Vibe coding\ncon corazón',
+        'Pensamientos que unen',
+        'Celebramos juntos',
+        'Con cariño',
+        'La amistad es amor elegido'
+      ];
+
+      const $mensajes = document.getElementById('mensajes');
+      FRASES.forEach((texto, i) => {
+        const el = document.createElement('div');
+        el.className = 'frase';
+        el.setAttribute('data-index', String(i));
+        el.textContent = texto;
+        $mensajes.appendChild(el);
+      });
+      let fraseIndex = 0;
+      let vibeVisible = true;
+      $mensajes.querySelector('.frase')?.classList.add('visible');
+
+      // Vibe letters
+      const VIBE_TOKENS = ['const', '=>', '{}', '()', 'let', 'fn', 'async', '·', 'x', 'y', 'i', '...', 'return', 'true', 'null', '=>', '[]', 'map', 'filter', '✨', 'λ', '→'];
+      const VIBE_COLORS = ['#ff4081', '#e91e63', '#ff1744', '#f48fb1', '#ce93d8', '#b39ddb', '#80cbc4', '#ffab91', '#ffcc80'];
+      const $vibe = document.getElementById('vibe-letters');
+      const vibeLetters = [];
+      const VIBE_COUNT = 32;
+      for (let i = 0; i < VIBE_COUNT; i++) {
+        const el = document.createElement('span');
+        el.className = 'char';
+        el.textContent = VIBE_TOKENS[i % VIBE_TOKENS.length];
+        el.style.color = VIBE_COLORS[i % VIBE_COLORS.length];
+        $vibe.appendChild(el);
+        vibeLetters.push({
+          el,
+          phaseX: Math.random() * Math.PI * 2,
+          phaseY: Math.random() * Math.PI * 2,
+          phaseO: Math.random() * Math.PI * 2,
+          speedX: 0.00015 + Math.random() * 0.0002,
+          speedY: 0.00012 + Math.random() * 0.00018,
+          radiusX: 80 + Math.random() * 180,
+          radiusY: 60 + Math.random() * 140,
+          baseX: (Math.random() - 0.5) * 100,
+          baseY: (Math.random() - 0.5) * 80
+        });
+      }
+
+      const canvas = document.getElementById('gl');
+      const useTransparent = document.body.classList.contains('transparent');
+      const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: false,
+        alpha: useTransparent,
+        powerPreference: 'high-performance'
+      });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setClearColor(0x000000, useTransparent ? 0 : 1);
+      renderer.autoClear = true;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(55, 1, 1, 5000);
+      camera.position.set(0, 0, 1100);
+      camera.lookAt(0, 0, 0);
+
+      let vw = 1, vh = 1;
+      let viewW = 1200, viewH = 700;
+      function resize() {
+        vw = window.innerWidth;
+        vh = window.innerHeight;
+        renderer.setSize(vw, vh, false);
+        camera.aspect = vw / vh;
+        camera.updateProjectionMatrix();
+        const dist = camera.position.z;
+        const fovRad = camera.fov * Math.PI / 180;
+        viewH = 2 * Math.tan(fovRad / 2) * dist;
+        viewW = viewH * camera.aspect;
+      }
+      window.addEventListener('resize', resize, { passive: true });
+      resize();
+
+      const positions = new Float32Array(PARTICLE_COUNT * 3);
+      const velocities = new Float32Array(PARTICLE_COUNT * 3);
+      const targets = new Float32Array(PARTICLE_COUNT * 3);
+      const baseTargets = new Float32Array(PARTICLE_COUNT * 3);
+      const colors = new Float32Array(PARTICLE_COUNT * 3);
+      const phase = new Float32Array(PARTICLE_COUNT);
+      const seed = new Float32Array(PARTICLE_COUNT);
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const i3 = i * 3;
+        const rx = (Math.random() - 0.5) * viewW * 0.8;
+        const ry = (Math.random() - 0.5) * viewH * 0.8;
+        const rz = (Math.random() - 0.5) * 200;
+        positions[i3 + 0] = rx;
+        positions[i3 + 1] = ry;
+        positions[i3 + 2] = rz;
+        velocities[i3 + 0] = (Math.random() - 0.5) * 0.5;
+        velocities[i3 + 1] = (Math.random() - 0.5) * 0.5;
+        velocities[i3 + 2] = (Math.random() - 0.5) * 0.3;
+        targets[i3 + 0] = rx;
+        targets[i3 + 1] = ry;
+        targets[i3 + 2] = rz;
+        phase[i] = Math.random() * Math.PI * 2;
+        seed[i] = Math.random();
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+      const material = new THREE.PointsMaterial({
+        size: PARTICLE_SIZE,
+        sizeAttenuation: true,
+        vertexColors: true,
+        transparent: true,
+        opacity: 0.94,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        depthTest: true
+      });
+
+      const points = new THREE.Points(geometry, material);
+      scene.add(points);
+
+      function hexToRgb01(hex) {
+        return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
+      }
+
+      function buildHeartTargets(scale, pulseScale) {
+        const N = PARTICLE_COUNT;
+        const s = scale * (pulseScale || 1);
+        const norm = 1 / 20;
+        for (let i = 0; i < N; i++) {
+          const i3 = i * 3;
+          const t = (i / N) * Math.PI * 2 + (i * 0.1375);
+          const phi = (i * 2.39996) % (Math.PI * 2);
+          const sinT = Math.sin(t);
+          const hx = 16 * sinT * sinT * sinT;
+          const hy = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
+          const nx = (hx * norm) * Math.cos(phi);
+          const ny = hy * norm;
+          const nz = (hx * norm) * Math.sin(phi);
+          baseTargets[i3 + 0] = nx * s;
+          baseTargets[i3 + 1] = ny * s;
+          baseTargets[i3 + 2] = nz * s;
+          const mix = (ny * 0.5 + 0.5);
+          const [r1, g1, b1] = hexToRgb01(C_ROSE);
+          const [r2, g2, b2] = hexToRgb01(C_PINK);
+          const [r3, g3, b3] = hexToRgb01(C_HOT);
+          const r = r1 * (1 - mix) + r2 * mix * 0.7 + r3 * mix * 0.3;
+          const g = g1 * (1 - mix) + g2 * mix * 0.7 + g3 * mix * 0.3;
+          const b = b1 * (1 - mix) + b2 * mix * 0.7 + b3 * mix * 0.3;
+          colors[i3 + 0] = Math.min(1, r);
+          colors[i3 + 1] = Math.min(1, g);
+          colors[i3 + 2] = Math.min(1, b);
+        }
+        geometry.attributes.color.needsUpdate = true;
+      }
+
+      function buildShapeTargets(shapeName, colorHex) {
+        const N = PARTICLE_COUNT;
+        const s = SHAPE_SCALE;
+        const [cr, cg, cb] = hexToRgb01(colorHex);
+        const golden = Math.PI * (3 - Math.sqrt(5));
+        for (let i = 0; i < N; i++) {
+          const i3 = i * 3;
+          let x = 0, y = 0, z = 0;
+          if (shapeName === 'sphere') {
+            const phi = Math.acos(1 - 2 * (i + 0.5) / N);
+            const theta = golden * i;
+            x = Math.sin(phi) * Math.cos(theta);
+            y = Math.cos(phi);
+            z = Math.sin(phi) * Math.sin(theta);
+          } else if (shapeName === 'cube') {
+            const side = (i * 7) % 6;
+            const u = ((i * 137) % 1000) / 1000;
+            const v = ((i * 421) % 1000) / 1000;
+            const a = (u - 0.5) * 2, b = (v - 0.5) * 2;
+            if (side === 0) { x = 1; y = a; z = b; }
+            else if (side === 1) { x = -1; y = a; z = b; }
+            else if (side === 2) { y = 1; x = a; z = b; }
+            else if (side === 3) { y = -1; x = a; z = b; }
+            else if (side === 4) { z = 1; x = a; y = b; }
+            else { z = -1; x = a; y = b; }
+          } else if (shapeName === 'torus') {
+            const u = (i / N) * Math.PI * 2;
+            const v = ((i * 7) % N) / N * Math.PI * 2;
+            const R = 1, r = 0.4;
+            x = (R + r * Math.cos(v)) * Math.cos(u);
+            y = r * Math.sin(v);
+            z = (R + r * Math.cos(v)) * Math.sin(u);
+          } else if (shapeName === 'cone') {
+            const t = i / N;
+            const rad = 1 - t * 0.999;
+            const angle = (i * 137.5 * Math.PI / 180) + t * 10;
+            x = rad * Math.cos(angle);
+            y = -1 + 2 * (1 - t);
+            z = rad * Math.sin(angle);
+          }
+          targets[i3 + 0] = x * s;
+          targets[i3 + 1] = y * s;
+          targets[i3 + 2] = z * s;
+          colors[i3 + 0] = cr;
+          colors[i3 + 1] = cg;
+          colors[i3 + 2] = cb;
+        }
+        geometry.attributes.color.needsUpdate = true;
+      }
+
+      let currentFigure = 'heart';
+      const FIGURE_COLORS = {
+        heart: C_PINK,
+        cone: C_NEON_GREEN,
+        sphere: C_NEON_YELLOW,
+        cube: C_NEON_BLUE,
+        torus: C_NEON_PINK
+      };
+
+      function setFigure(name) {
+        if (name === 'heart') {
+          currentFigure = 'heart';
+          buildHeartTargets(HEART_SCALE, 1);
+          for (let i = 0; i < PARTICLE_COUNT; i++) {
+            const i3 = i * 3;
+            targets[i3 + 0] = baseTargets[i3 + 0] + HEART_OFFSET_X;
+            targets[i3 + 1] = baseTargets[i3 + 1] + HEART_OFFSET_Y;
+            targets[i3 + 2] = baseTargets[i3 + 2];
+          }
+        } else if (['cone', 'sphere', 'cube', 'torus'].indexOf(name) !== -1) {
+          currentFigure = name;
+          buildShapeTargets(name, FIGURE_COLORS[name] || C_NEON_BLUE);
+        }
+      }
+
+      function showPhrase(indexOrText) {
+        const phrases = $mensajes.querySelectorAll('.frase');
+        if (typeof indexOrText === 'number' && indexOrText >= 0 && indexOrText < FRASES.length) {
+          fraseIndex = indexOrText;
+          phrases.forEach((el, i) => el.classList.toggle('visible', i === indexOrText));
+          return;
+        }
+        const text = String(indexOrText || '').trim();
+        if (!text) return;
+        const idx = FRASES.indexOf(text);
+        if (idx !== -1) {
+          fraseIndex = idx;
+          phrases.forEach((el, i) => el.classList.toggle('visible', i === idx));
+        } else {
+          const existing = Array.from(phrases).find(el => el.textContent.trim() === text);
+          if (existing) {
+            const i = parseInt(existing.getAttribute('data-index'), 10);
+            if (i >= 0) {
+              fraseIndex = i;
+              phrases.forEach((el, j) => el.classList.toggle('visible', j === i));
+            }
+          } else {
+            phrases.forEach((el) => el.classList.remove('visible'));
+            const wrap = document.createElement('div');
+            wrap.className = 'frase visible';
+            wrap.textContent = text;
+            wrap.setAttribute('data-index', 'custom');
+            $mensajes.appendChild(wrap);
+            setTimeout(() => {
+              wrap.remove();
+              $mensajes.querySelectorAll('.frase')[fraseIndex]?.classList.add('visible');
+            }, 6000);
+          }
+        }
+      }
+
+      setFigure('heart');
+
+      window.addEventListener('message', (ev) => {
+        const data = ev.data;
+        if (!data || data.type !== 'scene') return;
+        if (data.figure) setFigure(data.figure);
+        if (data.vibe === true || data.vibe === false) vibeVisible = data.vibe;
+        if (data.phraseId !== undefined) showPhrase(data.phraseId);
+        if (data.text !== undefined) showPhrase(data.text);
+      });
+
+      function stepParticles(dt) {
+        const k = LERP_RETURN;
+        const damp = Math.exp(-dt * 6.2);
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const i3 = i * 3;
+          const px = positions[i3 + 0];
+          const py = positions[i3 + 1];
+          const pz = positions[i3 + 2];
+          const tx = targets[i3 + 0];
+          const ty = targets[i3 + 1];
+          const tz = targets[i3 + 2];
+          velocities[i3 + 0] += (tx - px) * k;
+          velocities[i3 + 1] += (ty - py) * k;
+          velocities[i3 + 2] += (tz - pz) * k;
+          velocities[i3 + 0] *= damp;
+          velocities[i3 + 1] *= damp;
+          velocities[i3 + 2] *= damp;
+          positions[i3 + 0] = px + velocities[i3 + 0] * dt * 60;
+          positions[i3 + 1] = py + velocities[i3 + 1] * dt * 60;
+          positions[i3 + 2] = pz + velocities[i3 + 2] * dt * 60;
+        }
+        geometry.attributes.position.needsUpdate = true;
+      }
+
+      let lastT = performance.now();
+
+      function animate(now) {
+        const dt = Math.min(0.033, (now - lastT) / 1000);
+        lastT = now;
+
+        if (currentFigure === 'heart') {
+          const pulseScale = 1 + PULSE_AMP * Math.sin(now * PULSE_FREQ);
+          const swayX = SWAY_AMP * Math.sin(now * SWAY_FREQ);
+          const swayY = SWAY_AMP * 0.6 * Math.sin(now * SWAY_FREQ * 0.9 + 0.7);
+          const offX = HEART_OFFSET_X + swayX;
+          const offY = HEART_OFFSET_Y + swayY;
+          for (let i = 0; i < PARTICLE_COUNT; i++) {
+            const i3 = i * 3;
+            targets[i3 + 0] = baseTargets[i3 + 0] * pulseScale + offX;
+            targets[i3 + 1] = baseTargets[i3 + 1] * pulseScale + offY;
+            targets[i3 + 2] = baseTargets[i3 + 2] * pulseScale;
+          }
+        }
+
+        if (vibeVisible) {
+          vibeLetters.forEach((v) => {
+            const px = 50 + (v.baseX + v.radiusX * Math.sin(v.phaseX + now * v.speedX)) * (100 / viewW);
+            const py = 50 + (v.baseY + v.radiusY * Math.cos(v.phaseY + now * v.speedY)) * (100 / viewH);
+            const op = 0.48 + 0.4 * Math.sin(v.phaseO + now * 0.0009);
+            const scale = 0.94 + 0.1 * Math.sin(now * 0.0007 + v.phaseO);
+            const rot = 2 * Math.sin(now * 0.0005 + v.phaseX) * (Math.PI / 180);
+            v.el.style.left = px + '%';
+            v.el.style.top = py + '%';
+            v.el.style.transform = `translate(-50%, -50%) scale(${scale}) rotate(${rot}rad)`;
+            v.el.style.opacity = String(op);
+          });
+          $vibe.style.display = '';
+        } else {
+          $vibe.style.display = 'none';
+        }
+
+        stepParticles(dt);
+        renderer.render(scene, camera);
+        requestAnimationFrame(animate);
+      }
+      requestAnimationFrame(animate);
+    })();
+  </script>
+</body>
+</html>

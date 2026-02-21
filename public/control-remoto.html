@@ -191,6 +191,29 @@
       </div>
     </header>
 
+    <!-- Figuras 3D -->
+    <div class="card">
+      <div class="card-title">🎨 Figuras 3D</div>
+      <div class="grid2 grid-figuras">
+        <button class="btn primary" data-figure="heart">❤️ Corazón</button>
+        <button class="btn good" data-figure="cone">🔺 Cono</button>
+        <button class="btn warn" data-figure="sphere">🔵 Esfera</button>
+        <button class="btn" data-figure="cube">🟦 Cubo</button>
+        <button class="btn" data-figure="torus">🍩 Toro</button>
+      </div>
+    </div>
+
+    <!-- Escritos -->
+    <div class="card">
+      <div class="card-title">✍️ Escritos</div>
+      <div class="grid2" id="escritosGrid"></div>
+      <div style="height:8px"></div>
+      <div class="toast-row">
+        <input id="customText" placeholder="Texto custom…" />
+        <button class="btn ghost" id="sendCustomText">Mostrar</button>
+      </div>
+    </div>
+
     <!-- Quick Toast -->
     <div class="card">
       <div class="card-title">💬 Quick Message</div>
@@ -272,9 +295,18 @@
   const $ = id => document.getElementById(id);
   
   // ========== CONFIG ==========
-  // Default token when served from the server (matches OBS_REMOTE_TOKEN env var)
   const DEFAULT_TOKEN = "elias123";
-  
+  const FRASES = [
+    "Amor y amistad",
+    "Feliz día del amor",
+    "Gracias por estar",
+    "Vibe coding con corazón",
+    "Pensamientos que unen",
+    "Celebramos juntos",
+    "Con cariño",
+    "La amistad es amor elegido"
+  ];
+
   // ========== State ==========
   const state = {
     ws: null,
@@ -451,8 +483,43 @@
     send({ type: "sequence", action: "reset", seq: state.seq });
   }
 
+  function sendSceneFigure(figure) {
+    send({ type: "scene", figure });
+  }
+
+  function sendScenePhrase(phraseId) {
+    send({ type: "scene", phraseId });
+  }
+
+  function sendSceneText(text) {
+    send({ type: "scene", text: text.trim() });
+  }
+
   // ========== Event Listeners ==========
   function wire() {
+    // Figuras 3D
+    document.querySelectorAll("[data-figure]").forEach(btn => {
+      btn.onclick = () => sendSceneFigure(btn.dataset.figure);
+    });
+
+    // Escritos: build buttons from FRASES
+    const escritosGrid = $("escritosGrid");
+    if (escritosGrid) {
+      FRASES.forEach((texto, i) => {
+        const btn = document.createElement("button");
+        btn.className = "btn ghost";
+        btn.textContent = texto.length > 18 ? texto.slice(0, 18) + "…" : texto;
+        btn.dataset.phraseId = String(i);
+        btn.onclick = () => sendScenePhrase(i);
+        escritosGrid.appendChild(btn);
+      });
+    }
+    $("sendCustomText").onclick = () => {
+      const v = $("customText").value.trim();
+      if (v) sendSceneText(v);
+      else toast("Escribe un texto");
+    };
+
     // Toast
     $("sendToast").onclick = sendToast;
     $("toastMsg").onkeydown = (e) => { if (e.key === "Enter") sendToast(); };
