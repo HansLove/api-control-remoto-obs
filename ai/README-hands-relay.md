@@ -1,3 +1,9 @@
+yr263kHwHNS8aQoZQzvYjO4cLeS6T4Lc
+
+qfdp5rF5EUr6XVaWY0cN8msEvicKKYus
+
+
+
 # Animación 3D con manos para OBS
 
 Overlay de partículas 3D controlado por gestos de manos.
