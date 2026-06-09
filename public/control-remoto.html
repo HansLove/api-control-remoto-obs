@@ -223,6 +223,16 @@
       </div>
     </div>
 
+    <!-- AI Question -->
+    <div class="card">
+      <div class="card-title">🤖 Pregunta a la IA</div>
+      <div class="toast-row">
+        <input id="aiQuestion" placeholder="Escribe una pregunta…" />
+        <button class="btn primary" id="sendAiQuestion">Enviar</button>
+      </div>
+      <div id="aiStatus" style="font-size:12px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
+    </div>
+
     <!-- Markers -->
     <div class="card">
       <div class="card-title">🎬 Markers</div>
@@ -435,6 +445,12 @@
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === "ack") toast("✓ Sent");
+          const s = $("aiStatus");
+          if (msg.type === "ai_thinking" && s) s.textContent = "🧠 Claude está pensando…";
+          if (msg.type === "ai_response" && s) {
+            s.textContent = "✅ Respuesta en el overlay";
+            setTimeout(() => { s.textContent = ""; }, 4000);
+          }
         } catch {}
       };
     } catch {
@@ -531,6 +547,20 @@
         else toast("Escribe un texto");
       };
     }
+
+    // AI Question
+    function sendAiQuestion() {
+      const q = ($("aiQuestion") && $("aiQuestion").value) ? $("aiQuestion").value.trim() : "";
+      if (!q) return toast("Escribe una pregunta");
+      send({ type: "ai_question", text: q });
+      $("aiQuestion").value = "";
+      const s = $("aiStatus");
+      if (s) s.textContent = "⏳ Enviando…";
+    }
+    const sendAiBtn = $("sendAiQuestion");
+    if (sendAiBtn) sendAiBtn.onclick = sendAiQuestion;
+    const aiQEl = $("aiQuestion");
+    if (aiQEl) aiQEl.onkeydown = (e) => { if (e.key === "Enter") sendAiQuestion(); };
 
     // Toast
     const sendToastBtn = $("sendToast");

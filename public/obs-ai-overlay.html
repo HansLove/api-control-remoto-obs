@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>AI Overlay</title>
+  <style>
+    :root {
+      --bg-card: rgba(8, 12, 20, 0.78);
+      --border: rgba(106, 169, 255, 0.22);
+      --fg: #eaf1ff;
+      --muted: rgba(234, 241, 255, 0.65);
+      --accent: #6aa9ff;
+      --good: #27d17f;
+      --warn: #f6c34a;
+      --shadow: 0 24px 56px rgba(0,0,0,.55), 0 0 0 1px rgba(106,169,255,.08);
+    }
+
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: transparent;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--fg);
+    }
+    * { box-sizing: border-box; }
+
+    /* Full-screen layer */
+    #layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+      padding: 0 40px 54px;
+    }
+
+    /* AI card */
+    #aiCard {
+      max-width: min(820px, calc(100% - 0px));
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow);
+      padding: 20px 22px;
+      opacity: 0;
+      transform: translateY(22px) scale(0.97);
+      transition: opacity 0.28s ease, transform 0.28s ease;
+    }
+    #aiCard.show {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    /* Header row */
+    .ai-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .ai-logo {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6aa9ff 0%, #a78bfa 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px;
+      flex-shrink: 0;
+    }
+    .ai-label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .ai-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--warn);
+      margin-left: auto;
+      flex-shrink: 0;
+      transition: background 0.3s;
+    }
+    .ai-dot.ok { background: var(--good); box-shadow: 0 0 0 3px rgba(39,209,127,.18); }
+
+    /* Question */
+    .ai-question {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+      line-height: 1.35;
+      margin-bottom: 10px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.06);
+      overflow-wrap: anywhere;
+    }
+    .ai-question::before {
+      content: "❓ ";
+      opacity: 0.7;
+    }
+
+    /* Answer */
+    .ai-answer {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.45;
+      letter-spacing: .1px;
+      color: var(--fg);
+      overflow-wrap: anywhere;
+      min-height: 1.45em;
+    }
+
+    /* Thinking animation */
+    .thinking-dots span {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin: 0 3px;
+      opacity: 0.3;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+    .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes pulse {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(1); }
+      40% { opacity: 1; transform: scale(1.25); }
+    }
+
+    /* Progress bar */
+    .ai-progress {
+      height: 2px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.07);
+      margin-top: 14px;
+      overflow: hidden;
+    }
+    .ai-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #6aa9ff, #a78bfa);
+      border-radius: 999px;
+      transition: width 0.1s linear;
+    }
+
+    /* Cursor blink for typewriter */
+    .cursor {
+      display: inline-block;
+      width: 2px;
+      height: 1.1em;
+      background: var(--accent);
+      vertical-align: text-bottom;
+      margin-left: 2px;
+      animation: blink 0.75s step-end infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+  </style>
+</head>
+<body>
+<div id="layer">
+  <div id="aiCard">
+    <div class="ai-header">
+      <div class="ai-logo">🤖</div>
+      <span class="ai-label">Claude AI</span>
+      <span class="ai-dot" id="aiDot"></span>
+    </div>
+    <div class="ai-question" id="aiQuestion">Esperando pregunta…</div>
+    <div class="ai-answer" id="aiAnswer">
+      <span class="thinking-dots">
+        <span></span><span></span><span></span>
+      </span>
+    </div>
+    <div class="ai-progress"><div class="ai-progress-bar" id="progressBar"></div></div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  const wsBase = q.get("ws") || `${protocol}//${location.host}`;
+  const token = q.get("token") || "";
+  const HIDE_AFTER_MS = Number(q.get("hideMs") || 12000);
+
+  const WS_URL = wsBase + (wsBase.includes("?") ? "&" : "?") + "role=ai-overlay"
+    + (token ? "&token=" + encodeURIComponent(token) : "");
+
+  const card = document.getElementById("aiCard");
+  const aiDot = document.getElementById("aiDot");
+  const questionEl = document.getElementById("aiQuestion");
+  const answerEl = document.getElementById("aiAnswer");
+  const progressBar = document.getElementById("progressBar");
+
+  let hideTimer = null;
+  let progressTimer = null;
+
+  function showCard() {
+    card.classList.add("show");
+  }
+  function hideCard() {
+    card.classList.remove("show");
+  }
+
+  function setThinking(question) {
+    clearTimeout(hideTimer);
+    clearInterval(progressTimer);
+    progressBar.style.width = "0%";
+    questionEl.textContent = question;
+    answerEl.innerHTML = '<span class="thinking-dots"><span></span><span></span><span></span></span>';
+    showCard();
+  }
+
+  function typewriterEffect(el, text, onDone) {
+    el.textContent = "";
+    const cursor = document.createElement("span");
+    cursor.className = "cursor";
+    el.appendChild(cursor);
+
+    let i = 0;
+    const speed = Math.max(14, Math.min(40, Math.round(10000 / text.length)));
+
+    const timer = setInterval(() => {
+      if (i < text.length) {
+        el.insertBefore(document.createTextNode(text[i]), cursor);
+        i++;
+      } else {
+        clearInterval(timer);
+        cursor.remove();
+        if (onDone) onDone();
+      }
+    }, speed);
+  }
+
+  function setResponse(question, answer) {
+    questionEl.textContent = question;
+    answerEl.innerHTML = "";
+
+    typewriterEffect(answerEl, answer, () => {
+      // Start progress bar countdown to hide
+      const steps = HIDE_AFTER_MS / 100;
+      let step = 0;
+      progressBar.style.width = "0%";
+      progressTimer = setInterval(() => {
+        step++;
+        progressBar.style.width = ((step / steps) * 100) + "%";
+        if (step >= steps) {
+          clearInterval(progressTimer);
+          hideCard();
+        }
+      }, 100);
+    });
+  }
+
+  // WebSocket
+  let ws = null;
+
+  function connect() {
+    if (ws) ws.close();
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      aiDot.classList.add("ok");
+    };
+    ws.onclose = () => {
+      aiDot.classList.remove("ok");
+      setTimeout(connect, 1500);
+    };
+    ws.onerror = () => {
+      aiDot.classList.remove("ok");
+    };
+
+    ws.onmessage = (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (!msg || !msg.type) return;
+
+      if (msg.type === "ai_thinking") {
+        setThinking(msg.question || "…");
+      } else if (msg.type === "ai_response") {
+        setResponse(msg.question || "…", msg.answer || "Sin respuesta.");
+      }
+    };
+  }
+
+  connect();
+})();
+</script>
+</body>
+</html>

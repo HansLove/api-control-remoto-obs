@@ -21,6 +21,7 @@
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
+const https = require("https");
 const express = require("express");
 const cors = require("cors");
 const WebSocket = require("ws");
@@ -29,6 +30,8 @@ const WebSocket = require("ws");
 const PORT = Number(process.env.PORT || 3000);
 const TOKEN = String(process.env.OBS_REMOTE_TOKEN || "changeme"); // set in env for real use
 const LOG_DIR = process.env.LOG_DIR || path.join(process.cwd(), "logs");
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
+const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
 
 // ---------- tiny utilities ----------
 const nowISO = () => new Date().toISOString();
@@ -52,6 +55,49 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
+// ---------- Claude AI helper ----------
+function callClaude(question) {
+  if (!ANTHROPIC_API_KEY) return Promise.resolve("ANTHROPIC_API_KEY no configurada en el servidor.");
+
+  const body = JSON.stringify({
+    model: CLAUDE_MODEL,
+    max_tokens: 350,
+    system: "Eres un asistente conciso para un stream en vivo. Responde en máximo 3 oraciones, directo y claro. Sin markdown.",
+    messages: [{ role: "user", content: question }],
+  });
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: "api.anthropic.com",
+        path: "/v1/messages",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(data);
+            resolve(parsed.content?.[0]?.text || "Sin respuesta.");
+          } catch {
+            reject(new Error("Parse error"));
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 // Serve static files from ./public
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 if (fs.existsSync(PUBLIC_DIR)) app.use(express.static(PUBLIC_DIR));
@@ -69,6 +115,11 @@ app.get("/control", (req, res) => {
 app.get("/overlay", (req, res) => {
   const p = path.join(PUBLIC_DIR, "overlay.html");
   if (!fs.existsSync(p)) return res.status(404).send("Missing public/overlay.html");
+  res.sendFile(p);
+});
+app.get("/ai-overlay", (req, res) => {
+  const p = path.join(PUBLIC_DIR, "obs-ai-overlay.html");
+  if (!fs.existsSync(p)) return res.status(404).send("Missing public/obs-ai-overlay.html");
   res.sendFile(p);
 });
 
@@ -188,6 +239,21 @@ wss.on("connection", (ws, req) => {
       return;
     }
 
+    // AI question: handle server-side, don't relay raw message
+    if (msg.type === "ai_question") {
+      const question = String(msg.text || "").trim().slice(0, 500);
+      if (!question) {
+        ws.send(JSON.stringify({ type: "ack", ok: false, message: "Empty question" }));
+        return;
+      }
+      ws.send(JSON.stringify({ type: "ack", ok: true, message: "processing" }));
+      broadcast({ type: "ai_thinking", question, serverTs: nowISO() });
+      callClaude(question)
+        .then((answer) => broadcast({ type: "ai_response", question, answer, serverTs: nowISO() }))
+        .catch((err) => broadcast({ type: "ai_response", question, answer: "Error: " + err.message, serverTs: nowISO() }));
+      appendLog({ type: "ai_question", question, serverTs: nowISO(), client: { id, role, ip } });
+      return;
+    }
 
     const enriched = {
       ...msg,
