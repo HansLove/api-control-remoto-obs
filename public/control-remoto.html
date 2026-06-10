@@ -85,6 +85,11 @@
     .btn.warn{background:rgba(246,195,74,.15);border-color:rgba(246,195,74,.25);}
     .btn.ghost{background:transparent;}
 
+    /* Duration pill selector */
+    .dur-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;}
+    .dur-pill{font-size:11px !important;padding:4px 11px !important;border-radius:20px !important;font-weight:600;}
+    .dur-pill.active{background:rgba(106,169,255,.25) !important;border-color:rgba(106,169,255,.55) !important;color:#7ab8ff !important;}
+
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
     .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
 
@@ -239,6 +244,17 @@
       <div class="toast-row">
         <input id="chartTopic" placeholder="Ej: Top 5 países por PIB 2024…" />
         <button class="btn primary" id="sendChartReq">Generar</button>
+      </div>
+      <!-- Duration selector -->
+      <div style="margin-top:10px;">
+        <div style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px;">⏱ Duración en pantalla</div>
+        <div class="dur-row">
+          <button class="btn dur-pill" data-dur="15000">15 s</button>
+          <button class="btn dur-pill" data-dur="30000">30 s</button>
+          <button class="btn dur-pill" data-dur="60000">1 min</button>
+          <button class="btn dur-pill" data-dur="180000">3 min</button>
+          <button class="btn dur-pill active" data-dur="0">∞ Siempre</button>
+        </div>
       </div>
       <div style="display:flex;gap:8px;margin-top:8px;">
         <button class="btn ghost" id="hideChart" style="font-size:11px;padding:5px 10px;">✕ Cerrar overlay</button>
@@ -574,13 +590,23 @@
     }
 
     // Chart AI request
+    let chartDuration = 0; // ms; 0 = stay until next chart/hide
+    document.querySelectorAll('.dur-pill').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.dur-pill').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        chartDuration = parseInt(btn.dataset.dur, 10);
+      };
+    });
+
     function sendChartRequest() {
       const t = ($("chartTopic") && $("chartTopic").value) ? $("chartTopic").value.trim() : "";
       if (!t) return toast("Escribe un tema para la gráfica");
-      send({ type: "chart_ai_request", topic: t });
+      send({ type: "chart_ai_request", topic: t, duration: chartDuration });
       $("chartTopic").value = "";
       const cs = $("chartStatus");
-      if (cs) cs.textContent = "⏳ Enviando…";
+      const durLabel = chartDuration === 0 ? "permanente" : (chartDuration >= 60000 ? (chartDuration/60000)+"min" : (chartDuration/1000)+"s");
+      if (cs) cs.textContent = `⏳ Generando… (${durLabel})`;
     }
     const sendChartBtn = $("sendChartReq");
     if (sendChartBtn) sendChartBtn.onclick = sendChartRequest;

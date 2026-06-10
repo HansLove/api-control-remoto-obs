@@ -308,12 +308,19 @@ wss.on("connection", (ws, req) => {
         ws.send(JSON.stringify({ type: "ack", ok: false, message: "Empty topic" }));
         return;
       }
+      // If client sends a duration, honour it; otherwise let Claude decide (default 20s)
+      const durationOverride = (msg.duration !== undefined && msg.duration !== null)
+        ? Math.max(0, Number(msg.duration) || 0)
+        : undefined;
       ws.send(JSON.stringify({ type: "ack", ok: true, message: "generating chart" }));
       broadcast({ type: "chart_thinking", topic, serverTs: nowISO() });
       callClaudeForChart(topic)
-        .then((chartData) => broadcast({ type: "chart_data", ...chartData, serverTs: nowISO() }))
+        .then((chartData) => {
+          if (durationOverride !== undefined) chartData.duration = durationOverride;
+          broadcast({ type: "chart_data", ...chartData, serverTs: nowISO() });
+        })
         .catch((err) => broadcast({ type: "chart_error", message: "Error: " + err.message, serverTs: nowISO() }));
-      appendLog({ type: "chart_ai_request", topic, serverTs: nowISO(), client: { id, role, ip } });
+      appendLog({ type: "chart_ai_request", topic, durationOverride, serverTs: nowISO(), client: { id, role, ip } });
       return;
     }
 
