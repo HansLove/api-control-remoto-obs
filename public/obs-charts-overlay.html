@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920">
+  <title>Charts Overlay – OBS</title>
+
+  <!-- Inter font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Chart.js 4 UMD (fully bundled, no extra adapters needed) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: transparent;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    /* ═══════════════════════════════════════════
+       MAIN PANEL — slides up from bottom
+    ═══════════════════════════════════════════ */
+    #overlay {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: var(--panel-h, 210px);
+
+      background: linear-gradient(175deg,
+        rgba(3, 7, 18, 0.95) 0%,
+        rgba(1, 4, 12, 0.98) 100%
+      );
+
+      /* Glow top border via pseudo */
+      overflow: hidden;
+
+      display: flex;
+      align-items: stretch;
+
+      /* Hidden: off-screen below */
+      opacity: 0;
+      transform: translateY(calc(100% + 6px));
+      transition:
+        opacity  0.6s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      will-change: transform, opacity;
+    }
+
+    /* Glowing top edge */
+    #overlay::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        var(--accent-a) 20%,
+        var(--accent-b) 50%,
+        var(--accent-a) 80%,
+        transparent 100%
+      );
+      box-shadow: 0 0 16px rgba(var(--accent-rgb), 0.55);
+      z-index: 2;
+    }
+
+    /* Subtle vertical scan-line texture */
+    #overlay::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 3px,
+        rgba(255,255,255,0.008) 3px,
+        rgba(255,255,255,0.008) 4px
+      );
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    #overlay.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ═══════════════════════════════════════════
+       LEFT INFO PANEL
+    ═══════════════════════════════════════════ */
+    #info {
+      width: 272px;
+      min-width: 272px;
+      flex-shrink: 0;
+      padding: 16px 18px 16px 22px;
+      border-right: 1px solid rgba(255,255,255,0.055);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 8px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Colored left accent bar */
+    #info::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 18%; bottom: 18%;
+      width: 3px;
+      background: linear-gradient(to bottom, var(--accent-a), var(--accent-b));
+      border-radius: 0 3px 3px 0;
+      box-shadow: 2px 0 8px rgba(var(--accent-rgb), 0.5);
+    }
+
+    #type-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px 3px 8px;
+      border-radius: 20px;
+      border: 1px solid rgba(var(--accent-rgb), 0.3);
+      background: rgba(var(--accent-rgb), 0.09);
+      font-size: 10.5px;
+      font-weight: 700;
+      color: var(--accent-a);
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      width: fit-content;
+    }
+
+    #chart-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #eef4ff;
+      line-height: 1.25;
+      letter-spacing: -0.3px;
+    }
+
+    #chart-subtitle {
+      font-size: 11px;
+      color: rgba(150, 175, 210, 0.6);
+      line-height: 1.4;
+      font-weight: 400;
+    }
+
+    #unit-badge {
+      display: none;
+      align-items: center;
+      padding: 2px 9px;
+      border-radius: 6px;
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
+      background: rgba(var(--accent-rgb), 0.07);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-b);
+      width: fit-content;
+    }
+
+    /* ═══════════════════════════════════════════
+       CHART WRAPPER
+    ═══════════════════════════════════════════ */
+    #chart-wrap {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 32px 18px 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    #chart-canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    /* ═══════════════════════════════════════════
+       COUNTDOWN PROGRESS BAR
+    ═══════════════════════════════════════════ */
+    #progress {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
+      box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.65);
+      transform-origin: left center;
+      display: none;
+    }
+
+    /* ═══════════════════════════════════════════
+       WS STATUS DOT (dev indicator)
+    ═══════════════════════════════════════════ */
+    #dot {
+      position: fixed;
+      top: 8px; right: 12px;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #ef4444;
+      opacity: 0.45;
+      transition: all 0.3s;
+    }
+    #dot.ok {
+      background: #22d3ee;
+      box-shadow: 0 0 6px rgba(34,211,238,0.75);
+      opacity: 1;
+    }
+
+    /* ═══════════════════════════════════════════
+       THEME DEFAULTS (neon)
+    ═══════════════════════════════════════════ */
+    :root {
+      --accent-a:   #00d4ff;
+      --accent-b:   #818cf8;
+      --accent-rgb: 0, 212, 255;
+    }
+  </style>
+</head>
+<body>
+
+<div id="dot"></div>
+
+<div id="overlay">
+  <!-- Left: labels + metadata -->
+  <div id="info">
+    <div id="type-badge">
+      <span id="type-icon">📊</span>
+      <span id="type-label">Ranking</span>
+    </div>
+    <div id="chart-title">—</div>
+    <div id="chart-subtitle"></div>
+    <div id="unit-badge"></div>
+  </div>
+
+  <!-- Right: chart canvas -->
+  <div id="chart-wrap">
+    <canvas id="chart-canvas"></canvas>
+    <div id="progress"></div>
+  </div>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   OBS Charts Overlay
+   ──────────────────────────────────────────────────────────────────
+   URL params:
+     ?token=XXX      WebSocket auth token (required)
+     ?height=220     Panel height in px (default 210)
+
+   WS messages handled:
+     chart_data  →  render chart
+     chart_hide  →  dismiss
+
+   chart_data format (what the AI generates):
+   {
+     "type":       "chart_data",
+     "title":      "Top 5 Economías 2024",
+     "subtitle":   "PIB nominal en billones USD",
+     "labels":     ["EE.UU.", "China", "Japón", "Alemania", "India"],
+     "values":     [25.4, 17.9, 4.2, 4.1, 3.7],
+     "unit":       "T USD",
+     "chart_type": "horizontalBar" | "bar" | "line",
+     "theme":      "neon" | "ocean" | "fire" | "emerald" | "gold",
+     "duration":   20000   (ms; 0 = stay until chart_hide)
+   }
+══════════════════════════════════════════════════════════════════ */
+
+// ── URL config ─────────────────────────────────────────────────
+const P       = new URLSearchParams(location.search);
+const TOKEN   = P.get('token')  || 'changeme';
+const H       = parseInt(P.get('height') || '210', 10);
+const WS_URL  = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}?token=${TOKEN}&role=charts-overlay`;
+
+document.documentElement.style.setProperty('--panel-h', H + 'px');
+
+// ── DOM refs ──────────────────────────────────────────────────
+const overlay    = document.getElementById('overlay');
+const dot        = document.getElementById('dot');
+const typeIcon   = document.getElementById('type-icon');
+const typeLbl    = document.getElementById('type-label');
+const titleEl    = document.getElementById('chart-title');
+const subtitleEl = document.getElementById('chart-subtitle');
+const unitEl     = document.getElementById('unit-badge');
+const canvas     = document.getElementById('chart-canvas');
+const progressEl = document.getElementById('progress');
+
+// ── Themes ─────────────────────────────────────────────────────
+const THEMES = {
+  neon:    { a: [0, 212, 255],   b: [129, 140, 248] },
+  ocean:   { a: [6, 182, 212],   b: [37,  99,  235] },
+  fire:    { a: [251, 146, 60],  b: [239, 68,  68]  },
+  emerald: { a: [52,  211, 153], b: [16,  185, 129] },
+  gold:    { a: [253, 224, 71],  b: [245, 158, 11]  },
+};
+
+// ── Chart type display meta ────────────────────────────────────
+const TYPE_META = {
+  horizontalBar:  { icon: '📊', label: 'Ranking'   },
+  horizontal_bar: { icon: '📊', label: 'Ranking'   },
+  bar:            { icon: '📊', label: 'Barras'    },
+  line:           { icon: '📈', label: 'Tendencia' },
+};
+
+// ── State ─────────────────────────────────────────────────────
+let chart     = null;
+let hideTimer = null;
+
+// ── Helpers ───────────────────────────────────────────────────
+function rgb(arr, a = 1) {
+  return `rgba(${arr[0]},${arr[1]},${arr[2]},${a})`;
+}
+
+function fmtVal(v) {
+  const abs = Math.abs(v);
+  if (abs >= 1e12) return (v / 1e12).toFixed(1) + 'T';
+  if (abs >= 1e9)  return (v / 1e9).toFixed(1)  + 'B';
+  if (abs >= 1e6)  return (v / 1e6).toFixed(1)  + 'M';
+  if (abs >= 1e3)  return (v / 1e3).toFixed(1)  + 'K';
+  return v.toLocaleString('es', { maximumFractionDigits: 1 });
+}
+
+function applyTheme(name) {
+  const t = THEMES[name] || THEMES.neon;
+  document.documentElement.style.setProperty('--accent-a', rgb(t.a));
+  document.documentElement.style.setProperty('--accent-b', rgb(t.b));
+  document.documentElement.style.setProperty('--accent-rgb', t.a.join(','));
+  progressEl.style.background =
+    `linear-gradient(90deg, ${rgb(t.a)}, ${rgb(t.b)})`;
+  progressEl.style.boxShadow =
+    `0 0 10px ${rgb(t.a, 0.7)}`;
+  return t;
+}
+
+// ── Chart.js: value labels plugin ─────────────────────────────
+const valueLabelsPlugin = {
+  id: 'obsValueLabels',
+  afterDatasetsDraw(ch) {
+    const { ctx: c } = ch;
+    const isHBar = ch.options.indexAxis === 'y';
+    if (ch.config.type !== 'bar') return;
+
+    c.save();
+    c.font = "bold 12px 'Inter', system-ui, sans-serif";
+    c.fillStyle = 'rgba(220, 240, 255, 0.88)';
+
+    ch.data.datasets.forEach((ds, di) => {
+      const meta = ch.getDatasetMeta(di);
+      if (!meta.visible) return;
+      meta.data.forEach((bar, i) => {
+        const raw = ds.data[i];
+        const lbl = fmtVal(raw) + (ds._unit ? ' ' + ds._unit : '');
+        if (isHBar) {
+          c.textAlign    = 'left';
+          c.textBaseline = 'middle';
+          c.fillText(lbl, bar.x + 8, bar.y);
+        } else {
+          c.textAlign    = 'center';
+          c.textBaseline = 'bottom';
+          c.fillText(lbl, bar.x, bar.y - 5);
+        }
+      });
+    });
+    c.restore();
+  },
+};
+
+Chart.register(valueLabelsPlugin);
+
+// ── Render ────────────────────────────────────────────────────
+function renderChart(data) {
+  // Reset timers
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  if (chart)     { chart.destroy(); chart = null; }
+
+  const {
+    title      = '—',
+    subtitle   = '',
+    labels     = [],
+    values     = [],
+    unit       = '',
+    chart_type = 'horizontalBar',
+    theme      = 'neon',
+    duration   = 0,
+  } = data;
+
+  const t    = applyTheme(theme);
+  const isH  = chart_type === 'horizontalBar' || chart_type === 'horizontal_bar';
+  const isL  = chart_type === 'line';
+
+  // ── Info panel ──
+  const meta = TYPE_META[chart_type] || TYPE_META.bar;
+  typeIcon.textContent   = meta.icon;
+  typeLbl.textContent    = meta.label;
+  titleEl.textContent    = title;
+  subtitleEl.textContent = subtitle;
+
+  if (unit) {
+    unitEl.textContent   = unit;
+    unitEl.style.display = 'inline-flex';
+  } else {
+    unitEl.style.display = 'none';
+  }
+
+  // ── Progress bar reset ──
+  progressEl.style.transition = 'none';
+  progressEl.style.transform  = 'scaleX(1)';
+  progressEl.style.display    = duration > 0 ? 'block' : 'none';
+
+  // ── Build Chart.js config ──
+  const n          = labels.length;
+  const barThick   = isH
+    ? Math.min(28, Math.max(12, Math.floor(148 / Math.max(n, 1))))
+    : undefined;
+  const maxVal     = Math.max(...values, 1);
+
+  // Gradient factory (called per-bar via callback)
+  function bgColor(ctx) {
+    const ch = ctx.chart;
+    const { ctx: c, chartArea } = ch;
+    if (!chartArea) return rgb(t.a, 0.85);
+    const grad = isH
+      ? c.createLinearGradient(chartArea.left, 0, chartArea.right, 0)
+      : c.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+    grad.addColorStop(0,    rgb(t.a, 0.94));
+    grad.addColorStop(0.55, rgb(t.a, 0.8));
+    grad.addColorStop(1,    rgb(t.b, 0.65));
+    return grad;
+  }
+
+  let config;
+
+  if (isL) {
+    // ─── Line chart ───────────────────────────
+    config = {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: unit || 'Valor',
+          data: values,
+          fill: true,
+          backgroundColor: rgb(t.a, 0.1),
+          borderColor: rgb(t.a, 0.9),
+          borderWidth: 2.5,
+          pointBackgroundColor: rgb(t.a, 1),
+          pointBorderColor: 'rgba(2,6,18,0.6)',
+          pointBorderWidth: 2,
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          tension: 0.4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 900, easing: 'easeOutCubic' },
+        layout: { padding: { top: 14, right: 48, bottom: 0, left: 4 } },
+        plugins: {
+          legend: { display: false },
+          tooltip: { enabled: false },
+          obsValueLabels: false,
+        },
+        scales: {
+          x: {
+            grid:   { color: 'rgba(255,255,255,0.04)' },
+            border: { display: false },
+            ticks:  {
+              color: 'rgba(190,215,240,0.75)',
+              font:  { size: 11, family: "'Inter',system-ui,sans-serif", weight: '500' },
+            },
+          },
+          y: {
+            grid:   { color: 'rgba(255,255,255,0.04)' },
+            border: { display: false },
+            ticks:  {
+              color: 'rgba(190,215,240,0.5)',
+              font:  { size: 10, family: "'Inter',system-ui,sans-serif" },
+            },
+          },
+        },
+      },
+    };
+
+  } else {
+    // ─── Bar chart (vertical or horizontal) ───
+    const dataset = {
+      label: unit || 'Valor',
+      data: values,
+      _unit: unit,
+      backgroundColor: bgColor,
+      hoverBackgroundColor: rgb(t.a, 0.98),
+      borderRadius: isH
+        ? { topRight: 5, bottomRight: 5 }
+        : { topLeft:  5, topRight:  5  },
+      borderSkipped: false,
+    };
+    if (barThick) dataset.barThickness = barThick;
+
+    config = {
+      type: 'bar',
+      data: { labels, datasets: [dataset] },
+      options: {
+        indexAxis: isH ? 'y' : 'x',
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 850,
+          easing:   'easeOutCubic',
+          ...(isH ? { x: { from: 0 } } : { y: { from: 0 } }),
+        },
+        layout: {
+          padding: isH
+            ? { right: 68, top: 4,  bottom: 4  }
+            : { top:  22, right: 8, bottom: 0 },
+        },
+        plugins: {
+          legend:         { display: false },
+          tooltip:        { enabled: false },
+          obsValueLabels: {},
+        },
+        scales: {
+          x: {
+            display: !isH,
+            grid:    { display: false },
+            border:  { display: false },
+            ticks: {
+              color: 'rgba(195,220,245,0.85)',
+              font:  {
+                size:   isH ? 0 : 11,
+                family: "'Inter',system-ui,sans-serif",
+                weight: '600',
+              },
+              maxRotation: 0,
+            },
+            ...(isH ? { max: maxVal * 1.22 } : {}),
+          },
+          y: {
+            display: isH,
+            grid:    { display: false },
+            border:  { display: false },
+            ticks: {
+              color:   'rgba(195,220,245,0.88)',
+              font:    { size: 12, family: "'Inter',system-ui,sans-serif", weight: '700' },
+              padding: 6,
+              mirror:  false,
+            },
+            ...(isH ? {} : { display: false }),
+          },
+        },
+      },
+    };
+  }
+
+  chart = new Chart(canvas.getContext('2d'), config);
+
+  // ── Show overlay ──
+  overlay.classList.add('visible');
+
+  // ── Countdown progress + auto-hide ──
+  if (duration > 0) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        progressEl.style.transition = `transform ${duration}ms linear`;
+        progressEl.style.transform  = 'scaleX(0)';
+      });
+    });
+    hideTimer = setTimeout(hideOverlay, duration);
+  }
+}
+
+function hideOverlay() {
+  overlay.classList.remove('visible');
+  if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+  setTimeout(() => {
+    if (chart) { chart.destroy(); chart = null; }
+    progressEl.style.transition = 'none';
+    progressEl.style.transform  = 'scaleX(1)';
+    progressEl.style.display    = 'none';
+  }, 650);
+}
+
+// ── WebSocket ──────────────────────────────────────────────────
+let ws, reconnDelay = 2500;
+
+function connect() {
+  try { ws = new WebSocket(WS_URL); } catch { retry(); return; }
+
+  ws.onopen = () => {
+    dot.className = 'ok';
+    reconnDelay = 2500;
+  };
+
+  ws.onclose = () => {
+    dot.className = '';
+    retry();
+  };
+
+  ws.onerror = () => ws.close();
+
+  ws.onmessage = (e) => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    if (msg.type === 'chart_data') renderChart(msg);
+    if (msg.type === 'chart_hide') hideOverlay();
+  };
+}
+
+function retry() {
+  setTimeout(connect, reconnDelay);
+  reconnDelay = Math.min(reconnDelay * 1.5, 30000);
+}
+
+connect();
+</script>
+</body>
+</html>

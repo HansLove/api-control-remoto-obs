@@ -233,6 +233,19 @@
       <div id="aiStatus" style="font-size:12px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
     </div>
 
+    <!-- Chart AI -->
+    <div class="card">
+      <div class="card-title">📊 Gráfica IA</div>
+      <div class="toast-row">
+        <input id="chartTopic" placeholder="Ej: Top 5 países por PIB 2024…" />
+        <button class="btn primary" id="sendChartReq">Generar</button>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn ghost" id="hideChart" style="font-size:11px;padding:5px 10px;">✕ Cerrar overlay</button>
+      </div>
+      <div id="chartStatus" style="font-size:12px;color:var(--muted);margin-top:8px;min-height:16px;"></div>
+    </div>
+
     <!-- Markers -->
     <div class="card">
       <div class="card-title">🎬 Markers</div>
@@ -445,11 +458,23 @@
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === "ack") toast("✓ Sent");
+          // AI Q&A
           const s = $("aiStatus");
           if (msg.type === "ai_thinking" && s) s.textContent = "🧠 Claude está pensando…";
           if (msg.type === "ai_response" && s) {
             s.textContent = "✅ Respuesta en el overlay";
             setTimeout(() => { s.textContent = ""; }, 4000);
+          }
+          // Charts
+          const cs = $("chartStatus");
+          if (msg.type === "chart_thinking" && cs) cs.textContent = "📊 Generando gráfica…";
+          if (msg.type === "chart_data" && cs) {
+            cs.textContent = `✅ "${msg.title || 'Gráfica'}" en overlay`;
+            setTimeout(() => { cs.textContent = ""; }, 6000);
+          }
+          if (msg.type === "chart_error" && cs) {
+            cs.textContent = "❌ " + (msg.message || "Error al generar gráfica");
+            setTimeout(() => { cs.textContent = ""; }, 5000);
           }
         } catch {}
       };
@@ -547,6 +572,25 @@
         else toast("Escribe un texto");
       };
     }
+
+    // Chart AI request
+    function sendChartRequest() {
+      const t = ($("chartTopic") && $("chartTopic").value) ? $("chartTopic").value.trim() : "";
+      if (!t) return toast("Escribe un tema para la gráfica");
+      send({ type: "chart_ai_request", topic: t });
+      $("chartTopic").value = "";
+      const cs = $("chartStatus");
+      if (cs) cs.textContent = "⏳ Enviando…";
+    }
+    const sendChartBtn = $("sendChartReq");
+    if (sendChartBtn) sendChartBtn.onclick = sendChartRequest;
+    const chartTopicEl = $("chartTopic");
+    if (chartTopicEl) chartTopicEl.onkeydown = (e) => { if (e.key === "Enter") sendChartRequest(); };
+    const hideChartBtn = $("hideChart");
+    if (hideChartBtn) hideChartBtn.onclick = () => {
+      send({ type: "chart_hide" });
+      toast("Overlay cerrado");
+    };
 
     // AI Question
     function sendAiQuestion() {

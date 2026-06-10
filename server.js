@@ -98,6 +98,63 @@ function callClaude(question) {
   });
 }
 
+// ---------- Claude AI helper: chart data (returns parsed JSON) ----------
+function callClaudeForChart(topic) {
+  if (!ANTHROPIC_API_KEY) return Promise.reject(new Error("ANTHROPIC_API_KEY no configurada."));
+
+  const body = JSON.stringify({
+    model: CLAUDE_MODEL,
+    max_tokens: 420,
+    system: `Eres un generador de datos para gráficas en tiempo real para un stream en vivo.
+Responde ÚNICAMENTE con JSON válido y absolutamente nada más. Sin markdown, sin bloques de código, sin texto adicional, sin explicaciones.
+El JSON debe tener EXACTAMENTE esta estructura:
+{"title":"Título descriptivo (máx 44 chars)","subtitle":"Descripción breve opcional","labels":["Label1","Label2","Label3"],"values":[número1,número2,número3],"unit":"Unidad (ej: USD, %, GW, millones)","chart_type":"horizontalBar","theme":"neon","duration":20000}
+Reglas:
+- Entre 3 y 7 categorías
+- Labels cortos (máx 11 caracteres)
+- Values son números reales o estimados (solo números, sin unidades)
+- chart_type: "horizontalBar" para rankings/comparaciones, "bar" para distribuciones, "line" para tendencias en tiempo
+- theme: "neon" | "ocean" | "fire" | "emerald" | "gold"  (elige el que mejor encaje con el tema)
+- duration siempre 20000`,
+    messages: [{ role: "user", content: `Genera una gráfica sobre: ${topic}` }],
+  });
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: "api.anthropic.com",
+        path: "/v1/messages",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(data);
+            let text = parsed.content?.[0]?.text || "";
+            // Strip any accidental markdown code fences
+            text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+            const chartData = JSON.parse(text);
+            resolve(chartData);
+          } catch {
+            reject(new Error("No se pudo parsear JSON de gráfica"));
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 // Serve static files from ./public
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 if (fs.existsSync(PUBLIC_DIR)) app.use(express.static(PUBLIC_DIR));
@@ -120,6 +177,11 @@ app.get("/overlay", (req, res) => {
 app.get("/ai-overlay", (req, res) => {
   const p = path.join(PUBLIC_DIR, "obs-ai-overlay.html");
   if (!fs.existsSync(p)) return res.status(404).send("Missing public/obs-ai-overlay.html");
+  res.sendFile(p);
+});
+app.get("/charts-overlay", (req, res) => {
+  const p = path.join(PUBLIC_DIR, "obs-charts-overlay.html");
+  if (!fs.existsSync(p)) return res.status(404).send("Missing public/obs-charts-overlay.html");
   res.sendFile(p);
 });
 
@@ -236,6 +298,22 @@ wss.on("connection", (ws, req) => {
     // Minimal validation
     if (!msg.type) {
       ws.send(JSON.stringify({ type: "ack", ok: false, message: "Missing type" }));
+      return;
+    }
+
+    // Chart AI request: generate chart data via Claude, broadcast chart_data
+    if (msg.type === "chart_ai_request") {
+      const topic = String(msg.topic || msg.text || "").trim().slice(0, 300);
+      if (!topic) {
+        ws.send(JSON.stringify({ type: "ack", ok: false, message: "Empty topic" }));
+        return;
+      }
+      ws.send(JSON.stringify({ type: "ack", ok: true, message: "generating chart" }));
+      broadcast({ type: "chart_thinking", topic, serverTs: nowISO() });
+      callClaudeForChart(topic)
+        .then((chartData) => broadcast({ type: "chart_data", ...chartData, serverTs: nowISO() }))
+        .catch((err) => broadcast({ type: "chart_error", message: "Error: " + err.message, serverTs: nowISO() }));
+      appendLog({ type: "chart_ai_request", topic, serverTs: nowISO(), client: { id, role, ip } });
       return;
     }
 
