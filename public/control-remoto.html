@@ -458,11 +458,22 @@
     connected: false,
     seq: { name: "top5", step: 0, max: 5, label: "" },
   };
-  let chartDuration  = 0;
-  let lastAiQ        = "";
-  let aiHistory      = [];
-  let histIdx        = -1;
-  let histDraft      = "";
+  let chartDuration   = 0;
+  let lastAiQ         = "";
+  let aiHistory       = [];
+  let histIdx         = -1;
+  let histDraft       = "";
+
+  // Reconnection
+  let lastConnUrl     = null;
+  let lastConnTok     = null;
+  let reconnTimer     = null;
+  let reconnDelay     = 3000;
+  let deliberateClose = false;
+
+  // Request timeouts (90 s — Claude can be slow)
+  let aiGenTimer      = null;
+  let chartGenTimer   = null;
 
   // ═══ URL ═══
   function isOnServer() { return location.protocol !== "file:" && location.hostname !== "localhost"; }
@@ -559,13 +570,26 @@
 
   // ═══ WebSocket ═══
   function connect(url, token) {
-    if (state.ws) state.ws.close();
+    // Cleanly detach old socket so its onclose doesn't trigger auto-reconnect
+    if (state.ws) {
+      state.ws.onclose = null;
+      state.ws.close();
+      state.ws = null;
+    }
+    clearTimeout(reconnTimer);
+    deliberateClose = false;
 
-    let wsUrl    = url || $("wsUrl")?.value?.trim() || getAutoWsUrl();
-    const wsTok  = token ?? $("token")?.value?.trim();
+    const rawUrl = url || $("wsUrl")?.value?.trim() || getAutoWsUrl();
+    const rawTok = (token !== undefined ? token : null) ?? $("token")?.value?.trim();
 
-    if (!wsUrl) { setStatus(false, "No URL"); $("connPanel").classList.add("open"); return; }
-    if (wsTok) wsUrl += (wsUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(wsTok);
+    if (!rawUrl) { setStatus(false, "No URL"); $("connPanel").classList.add("open"); return; }
+
+    // Remember for auto-reconnect
+    lastConnUrl = rawUrl;
+    lastConnTok = rawTok;
+
+    let wsUrl = rawUrl;
+    if (rawTok) wsUrl += (wsUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(rawTok);
 
     try {
       state.ws = new WebSocket(wsUrl);
@@ -575,30 +599,41 @@
         state.connected = true;
         setStatus(true, "Connected");
         toast("✓ Conectado");
+        reconnDelay = 3000; // reset backoff on success
         saveSettings();
       };
+
       state.ws.onclose = (e) => {
         state.connected = false;
         if (e.code === 1008) {
           setStatus(false, "Auth Failed");
           toast("Token inválido", 2000);
           $("connPanel").classList.add("open");
-        } else {
-          setStatus(false, "Disconnected");
+          return; // don't auto-reconnect on bad token
         }
+        if (deliberateClose) { setStatus(false, "Disconnected"); return; }
+
+        // Auto-reconnect with exponential backoff
+        setStatus(false, "🔄 Reconectando…");
+        reconnTimer = setTimeout(() => {
+          if (!deliberateClose) connect(lastConnUrl, lastConnTok);
+        }, reconnDelay);
+        reconnDelay = Math.min(reconnDelay * 1.6, 25000);
       };
-      state.ws.onerror = () => { state.connected = false; setStatus(false, "Error"); };
+
+      state.ws.onerror = () => { state.connected = false; };
 
       state.ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          if (msg.type === "ack") return; // silent ack
+          if (msg.type === "ack") return;
 
           // ── IA Q&A ──
           if (msg.type === "ai_thinking") {
             setStatusLine("aiStatus", "🧠 Claude está pensando…", "thinking");
           }
           if (msg.type === "ai_response") {
+            clearTimeout(aiGenTimer);
             setStatusLine("aiStatus", "");
             const box = $("aiResponseBox");
             if (box) {
@@ -613,6 +648,7 @@
             setStatusLine("chartStatus", "📊 Generando gráfica…", "thinking");
           }
           if (msg.type === "chart_data") {
+            clearTimeout(chartGenTimer);
             setStatusLine("chartStatus", "");
             const box = $("chartResultBox");
             if (box) {
@@ -626,6 +662,7 @@
             }
           }
           if (msg.type === "chart_error") {
+            clearTimeout(chartGenTimer);
             setStatusLine("chartStatus", "❌ " + (msg.message || "Error"), "error");
           }
         } catch {}
@@ -652,6 +689,12 @@
     pushHistory(q);
     $("aiResponseBox")?.classList.remove("show");
     setStatusLine("aiStatus", "⏳ Enviando…", "thinking");
+    // Timeout: 90 s — if no response, unblock the UI
+    clearTimeout(aiGenTimer);
+    aiGenTimer = setTimeout(() => {
+      if ($("aiStatus")?.classList.contains("thinking"))
+        setStatusLine("aiStatus", "⏰ Sin respuesta — reintenta", "error");
+    }, 90000);
   }
 
   function repeatLastAi() {
@@ -673,6 +716,12 @@
       : chartDuration >= 60000 ? (chartDuration/60000).toFixed(0)+"min"
       : (chartDuration/1000)+"s";
     setStatusLine("chartStatus", `⏳ Generando… (${durLabel})`, "thinking");
+    // Timeout: 90 s — prevents stuck "Generando…" if WS drops mid-request
+    clearTimeout(chartGenTimer);
+    chartGenTimer = setTimeout(() => {
+      if ($("chartStatus")?.classList.contains("thinking"))
+        setStatusLine("chartStatus", "⏰ Sin respuesta — reintenta", "error");
+    }, 90000);
   }
 
   function sendHideAll() {
@@ -838,7 +887,13 @@
     // ── Connection ──
     $("connToggle")?.addEventListener("click",      () => $("connPanel")?.classList.toggle("open"));
     $("connectBtn")?.addEventListener("click",      () => connect());
-    $("disconnectBtn")?.addEventListener("click",   () => { state.ws?.close(); setStatus(false, "Disconnected"); });
+    $("disconnectBtn")?.addEventListener("click", () => {
+      deliberateClose = true;
+      clearTimeout(reconnTimer);
+      if (state.ws) { state.ws.onclose = null; state.ws.close(); state.ws = null; }
+      state.connected = false;
+      setStatus(false, "Disconnected");
+    });
     $("wsUrl")?.addEventListener("change",  saveSettings);
     $("token")?.addEventListener("change",  saveSettings);
   }

@@ -139,8 +139,11 @@ Reglas:
           try {
             const parsed = JSON.parse(data);
             let text = parsed.content?.[0]?.text || "";
-            // Strip any accidental markdown code fences
+            // Strip markdown fences, then extract the first {...} block
+            // in case Claude adds surrounding prose
             text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) text = jsonMatch[0];
             const chartData = JSON.parse(text);
             resolve(chartData);
           } catch {
