@@ -283,6 +283,10 @@
         setThinking(msg.question || "…");
       } else if (msg.type === "ai_response") {
         setResponse(msg.question || "…", msg.answer || "Sin respuesta.");
+      } else if (msg.type === "ai_hide") {
+        clearTimeout(hideTimer);
+        clearInterval(progressTimer);
+        hideCard();
       }
     };
   }

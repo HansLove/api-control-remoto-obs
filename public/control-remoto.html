@@ -1,69 +1,117 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>OBS Remote</title>
   <style>
     :root{
       --bg:#0a0e14;
       --surface:rgba(18,26,38,.72);
-      --surface2:rgba(0,0,0,.22);
+      --surface2:rgba(0,0,0,.25);
       --text:#eaf1ff;
       --muted:#7a8ba8;
       --border:rgba(255,255,255,.08);
+      --border-focus:rgba(106,169,255,.45);
       --good:#27d17f;
       --warn:#f6c34a;
       --bad:#ff4d6d;
       --accent:#6aa9ff;
-      --shadow: 0 8px 24px rgba(0,0,0,.4);
-      --radius: 16px;
+      --radius:16px;
     }
     *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
     html,body{margin:0;height:100%;}
     body{
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-      background:var(--bg);
-      color:var(--text);
-      padding:12px;
-      padding-bottom:88px;
-      overflow-x:hidden;
+      background:var(--bg);color:var(--text);
+      padding:12px;padding-bottom:90px;overflow-x:hidden;
     }
     .wrap{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:10px;}
 
     /* ── Header ── */
     header{
       display:flex;align-items:center;justify-content:space-between;
-      padding:8px 4px 12px;
-      border-bottom:1px solid var(--border);
-      margin-bottom:4px;
+      padding:8px 4px 12px;border-bottom:1px solid var(--border);margin-bottom:2px;
     }
     .logo{font-size:15px;font-weight:800;letter-spacing:.3px;}
+    .header-right{display:flex;align-items:center;gap:8px;}
     .status{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--muted);}
-    .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);}
+    .dot{width:8px;height:8px;border-radius:50%;background:var(--warn);flex-shrink:0;}
     .dot.ok{background:var(--good);}
     .dot.bad{background:var(--bad);}
+    .btn-icon{
+      width:30px;height:30px;border-radius:10px;
+      border:1px solid var(--border);background:rgba(255,255,255,.04);
+      color:var(--muted);font-size:13px;cursor:pointer;
+      display:flex;align-items:center;justify-content:center;
+      transition:all .12s;flex-shrink:0;
+    }
+    .btn-icon:active{transform:scale(.92);}
+    .btn-icon.active{border-color:rgba(106,169,255,.4);color:var(--accent);background:rgba(106,169,255,.1);}
+
+    /* ── Shortcut panel ── */
+    .shortcut-panel{
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:var(--radius);padding:12px 14px;
+      backdrop-filter:blur(8px);
+    }
+    .shortcut-panel-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px;}
+    .shortcut-grid{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;align-items:center;}
+    .s-key{
+      font-family:ui-monospace,monospace;background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.12);border-radius:5px;
+      padding:2px 7px;font-size:10.5px;color:var(--accent);font-weight:700;
+      text-align:center;white-space:nowrap;
+    }
+    .s-desc{font-size:11.5px;color:var(--muted);}
 
     /* ── Cards ── */
     .card{
-      background:var(--surface);
-      border:1px solid var(--border);
-      border-radius:var(--radius);
-      padding:14px;
-      backdrop-filter:blur(8px);
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:var(--radius);padding:14px;backdrop-filter:blur(8px);
     }
+    .card-ai{border-color:rgba(106,169,255,.15);}
     .card-title{
       font-size:11px;font-weight:700;color:var(--muted);
-      text-transform:uppercase;letter-spacing:.5px;
-      margin-bottom:10px;
+      text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;
+      display:flex;align-items:center;gap:6px;
+    }
+    .kbd-badge{
+      font-family:ui-monospace,monospace;font-size:9.5px;font-weight:700;
+      color:var(--muted);background:rgba(255,255,255,.07);
+      border:1px solid rgba(255,255,255,.1);border-radius:4px;
+      padding:1px 5px;letter-spacing:0;text-transform:none;
     }
     .label-xs{font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.5px;text-transform:uppercase;margin-bottom:5px;}
 
+    /* ── Inputs ── */
+    .ai-row{display:flex;gap:8px;}
+    .ai-input{
+      flex:1;padding:13px 14px;border-radius:13px;
+      border:1px solid var(--border);
+      background:rgba(255,255,255,.05);
+      color:var(--text);font-size:15px;outline:none;
+      transition:border-color .15s,box-shadow .15s;
+    }
+    .ai-input:focus{border-color:var(--border-focus);box-shadow:0 0 0 3px rgba(106,169,255,.09);}
+    .ai-input::placeholder{color:var(--muted);}
+    .ai-input.focused-active{border-color:rgba(106,169,255,.35);}
+
+    .toast-row{display:flex;gap:8px;}
+    .toast-row input{
+      flex:1;padding:12px;border-radius:12px;
+      border:1px solid var(--border);background:rgba(255,255,255,.04);
+      color:var(--text);font-size:14px;outline:none;
+      transition:border-color .15s;
+    }
+    .toast-row input:focus{border-color:var(--border-focus);}
+    .toast-row input::placeholder{color:var(--muted);}
+    .toast-row .btn{width:auto;padding:12px 16px;}
+
     /* ── Buttons ── */
     .btn{
-      width:100%;padding:14px 12px;
-      border-radius:14px;border:1px solid var(--border);
-      background:rgba(255,255,255,.04);
+      width:100%;padding:13px 14px;border-radius:14px;
+      border:1px solid var(--border);background:rgba(255,255,255,.04);
       color:var(--text);font-size:14px;font-weight:700;
       cursor:pointer;transition:transform .05s,background .15s;
     }
@@ -73,55 +121,58 @@
     .btn.bad{background:rgba(255,77,109,.15);border-color:rgba(255,77,109,.25);}
     .btn.warn{background:rgba(246,195,74,.15);border-color:rgba(246,195,74,.25);}
     .btn.ghost{background:transparent;}
-    .btn.danger{background:rgba(255,77,109,.1);border-color:rgba(255,77,109,.25);color:#ff6b85;}
+    .btn.danger{background:rgba(255,77,109,.1);border-color:rgba(255,77,109,.22);color:#ff6b85;}
+    .btn.dock-active{border-color:rgba(106,169,255,.5);background:rgba(106,169,255,.22);}
 
-    /* ── Inputs ── */
-    .toast-row{display:flex;gap:8px;}
-    .toast-row input,.ai-input{
-      flex:1;padding:12px;border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(255,255,255,.04);
-      color:var(--text);font-size:14px;outline:none;
+    /* ── Quick chips ── */
+    .chips-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;}
+    .chip{
+      padding:4px 10px;border-radius:16px;
+      border:1px solid var(--border);background:rgba(255,255,255,.03);
+      color:var(--muted);font-size:11.5px;font-weight:600;
+      cursor:pointer;transition:all .12s;white-space:nowrap;
     }
-    .toast-row input::placeholder,.ai-input::placeholder{color:var(--muted);}
-    .toast-row .btn{width:auto;padding:12px 16px;}
-
-    /* ── Duration pills ── */
-    .dur-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;}
-    .dur-pill{font-size:11px !important;padding:4px 11px !important;border-radius:20px !important;font-weight:600;}
-    .dur-pill.active{background:rgba(106,169,255,.25) !important;border-color:rgba(106,169,255,.55) !important;color:#7ab8ff !important;}
+    .chip:hover,.chip:active{
+      background:rgba(106,169,255,.12);border-color:rgba(106,169,255,.3);color:var(--accent);
+    }
 
     /* ── AI response bubble ── */
     .response-box{
-      display:none;
-      margin-top:10px;
-      padding:10px 12px;
-      background:var(--surface2);
-      border-radius:12px;
+      display:none;margin-top:10px;padding:11px 13px;
+      background:var(--surface2);border-radius:12px;
       border-left:2px solid rgba(106,169,255,.4);
-      animation:fadeIn .25s ease;
+      animation:fadeIn .22s ease;
     }
     .response-box.show{display:block;}
-    .response-q{
-      font-size:10.5px;color:var(--muted);font-weight:600;
-      margin-bottom:5px;
-      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-    }
+    .response-q{font-size:10.5px;color:var(--muted);font-weight:600;margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
     .response-a{font-size:13.5px;color:var(--text);line-height:1.5;}
+    .btn-repeat{
+      margin-top:8px;padding:4px 11px;border-radius:9px;
+      border:1px solid var(--border);background:transparent;
+      color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;
+      transition:all .12s;
+    }
+    .btn-repeat:hover{background:rgba(255,255,255,.05);color:var(--text);}
+    .btn-repeat:active{transform:scale(.96);}
+    .hist-hint{font-size:10px;color:var(--muted);opacity:.55;margin-top:5px;}
 
-    /* ── Chart last-result box ── */
+    /* ── Chart result box ── */
     .chart-result-box{
-      display:none;
-      margin-top:8px;
-      padding:9px 12px;
-      background:var(--surface2);
-      border-radius:12px;
+      display:none;margin-top:8px;padding:9px 13px;
+      background:var(--surface2);border-radius:12px;
       border-left:2px solid rgba(106,169,255,.3);
-      animation:fadeIn .25s ease;
+      animation:fadeIn .22s ease;
     }
     .chart-result-box.show{display:block;}
     .chart-result-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;}
     .chart-result-meta{font-size:11px;color:var(--muted);}
+
+    /* ── Duration pills ── */
+    .dur-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px;}
+    .dur-pill{font-size:11px !important;padding:4px 10px !important;border-radius:20px !important;font-weight:600;}
+    .dur-pill kbd{font-size:9px;opacity:.45;font-family:ui-monospace,monospace;margin-left:3px;}
+    .dur-pill.active{background:rgba(106,169,255,.25) !important;border-color:rgba(106,169,255,.55) !important;color:#7ab8ff !important;}
+    .dur-pill.active kbd{opacity:.7;}
 
     /* ── Status line ── */
     .status-line{font-size:12px;color:var(--muted);margin-top:8px;min-height:16px;}
@@ -131,10 +182,29 @@
     /* ── Grids ── */
     .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
     .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
-
-    /* ── Reaction grid (big tactile) ── */
     .grid-react{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
     .btn-react{padding:18px 10px !important;font-size:15px !important;border-radius:16px !important;}
+
+    /* ── Collapsible secondary controls ── */
+    details.more-controls{
+      background:var(--surface);border:1px solid var(--border);
+      border-radius:var(--radius);overflow:hidden;
+      backdrop-filter:blur(8px);
+    }
+    details.more-controls > summary{
+      list-style:none;padding:13px 14px;
+      font-size:11px;font-weight:700;color:var(--muted);
+      text-transform:uppercase;letter-spacing:.5px;
+      cursor:pointer;user-select:none;
+      display:flex;align-items:center;gap:7px;
+    }
+    details.more-controls > summary::before{
+      content:"▶";font-size:8px;transition:transform .2s;opacity:.6;
+    }
+    details.more-controls[open] > summary::before{transform:rotate(90deg);}
+    details.more-controls > summary::-webkit-details-marker{display:none;}
+    .details-body{padding:0 14px 14px;display:flex;flex-direction:column;gap:14px;}
+    .details-section-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;}
 
     /* ── Sequence ── */
     .seq-display{
@@ -162,24 +232,35 @@
     /* ── Bottom dock ── */
     .dock{
       position:fixed;left:0;right:0;bottom:0;
-      padding:10px 12px 16px;
-      background:linear-gradient(to top,rgba(10,14,20,.98),rgba(10,14,20,.7));
-      backdrop-filter:blur(10px);border-top:1px solid var(--border);
+      padding:10px 12px 18px;
+      background:linear-gradient(to top,rgba(10,14,20,.99),rgba(10,14,20,.7));
+      backdrop-filter:blur(12px);border-top:1px solid var(--border);
     }
-    .dock-inner{max-width:480px;margin:0 auto;display:flex;gap:8px;}
-    .dock-inner .btn{flex:1;padding:16px 12px;font-size:15px;border-radius:16px;}
+    .dock-inner{max-width:480px;margin:0 auto;display:flex;gap:7px;}
+    .dock-btn{
+      flex:1;padding:14px 8px;font-size:13px;font-weight:700;
+      border-radius:14px;border:1px solid var(--border);
+      background:rgba(255,255,255,.04);color:var(--text);
+      cursor:pointer;transition:all .1s;
+      display:flex;flex-direction:column;align-items:center;gap:2px;
+    }
+    .dock-btn:active{transform:scale(.96);}
+    .dock-btn.primary{background:rgba(106,169,255,.18);border-color:rgba(106,169,255,.3);}
+    .dock-btn.active{border-color:rgba(106,169,255,.55);background:rgba(106,169,255,.25);}
+    .dock-btn.hide-btn{background:rgba(255,77,109,.08);border-color:rgba(255,77,109,.2);color:#ff8098;}
+    .dock-btn small{font-size:9.5px;opacity:.55;font-weight:600;font-family:ui-monospace,monospace;}
 
-    /* ── Toast notification ── */
+    /* ── Toast ── */
     .ui-toast{
-      position:fixed;left:50%;bottom:100px;transform:translateX(-50%);
-      padding:10px 16px;background:rgba(18,26,38,.95);
-      border:1px solid var(--border);border-radius:12px;
+      position:fixed;left:50%;bottom:96px;transform:translateX(-50%);
+      padding:9px 15px;background:rgba(18,26,38,.96);
+      border:1px solid var(--border);border-radius:11px;
       font-size:13px;font-weight:600;opacity:0;transition:opacity .15s;
       pointer-events:none;z-index:100;white-space:nowrap;
     }
     .ui-toast.show{opacity:1;}
 
-    @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(3px);}to{opacity:1;transform:none;}}
     @media(max-width:360px){.grid2,.grid3,.grid-react{grid-template-columns:1fr;}}
   </style>
 </head>
@@ -188,117 +269,146 @@
 
   <header>
     <div class="logo">📡 OBS Remote</div>
-    <div class="status">
-      <span class="dot" id="dot"></span>
-      <span id="statusText">Connecting…</span>
+    <div class="header-right">
+      <div class="status">
+        <span class="dot" id="dot"></span>
+        <span id="statusText">Connecting…</span>
+      </div>
+      <button class="btn-icon" id="shortcutToggle" title="Atajos de teclado">⌨️</button>
     </div>
   </header>
 
-  <!-- ═══ 1. IA CHAT ═══ -->
-  <div class="card">
-    <div class="card-title">🤖 Pregunta a la IA</div>
-    <div class="toast-row">
-      <input id="aiQuestion" placeholder="Escribe una pregunta…" />
-      <button class="btn primary" id="sendAiQuestion">Enviar</button>
+  <!-- Shortcut reference (hidden by default) -->
+  <div class="shortcut-panel" id="shortcutPanel" style="display:none;">
+    <div class="shortcut-panel-title">⌨️ Atajos de teclado</div>
+    <div class="shortcut-grid">
+      <span class="s-key">/ ó ?</span><span class="s-desc">Foco en pregunta IA</span>
+      <span class="s-key">g</span><span class="s-desc">Foco en gráfica</span>
+      <span class="s-key">↑ ↓</span><span class="s-desc">Navegar historial (en input IA)</span>
+      <span class="s-key">Enter</span><span class="s-desc">Enviar pregunta / generar gráfica</span>
+      <span class="s-key">r</span><span class="s-desc">Repetir última pregunta</span>
+      <span class="s-key">1–5</span><span class="s-desc">Seleccionar duración de gráfica</span>
+      <span class="s-key">Tab</span><span class="s-desc">Alternar foco IA ↔ Gráfica</span>
+      <span class="s-key">Esc</span><span class="s-desc">Ocultar todos los overlays</span>
     </div>
-    <!-- Respuesta visible en el control -->
+  </div>
+
+  <!-- ═══ ZONA B: IA EN VIVO ═══ -->
+  <div class="card card-ai">
+    <div class="card-title">
+      🤖 IA en vivo
+      <span class="kbd-badge">/ ó ?</span>
+    </div>
+    <div class="ai-row">
+      <input class="ai-input" id="aiQuestion" placeholder="Pregunta al stream…" autocomplete="off" />
+      <button class="btn primary" id="sendAiQuestion" style="width:auto;padding:13px 18px;">Enviar</button>
+    </div>
+    <!-- Quick prompts -->
+    <div class="chips-row">
+      <button class="chip" data-chip="¿Dato curioso sobre este tema?">💡 Dato</button>
+      <button class="chip" data-chip="Resume esto en 1 frase">📖 Resumen</button>
+      <button class="chip" data-chip="Pros y contras">⚖️ Pros/Contras</button>
+      <button class="chip" data-chip="Dame 3 puntos clave">🔢 3 Puntos</button>
+      <button class="chip" data-chip="¿Cuál es la diferencia entre">↔️ Diferencia</button>
+    </div>
+    <div class="hist-hint" id="histHint"></div>
+    <!-- Inline response -->
     <div id="aiResponseBox" class="response-box">
       <div class="response-q" id="aiResponseQ"></div>
       <div class="response-a" id="aiResponseA"></div>
+      <button class="btn-repeat" id="repeatAi">↩ Repetir</button>
     </div>
     <div id="aiStatus" class="status-line"></div>
   </div>
 
-  <!-- ═══ 2. GRÁFICA IA ═══ -->
+  <!-- ═══ ZONA C: GRÁFICA IA ═══ -->
   <div class="card">
-    <div class="card-title">📊 Gráfica IA</div>
-    <div class="toast-row">
-      <input id="chartTopic" placeholder="Ej: Top 5 países por PIB 2024…" />
-      <button class="btn primary" id="sendChartReq">Generar</button>
+    <div class="card-title">
+      📊 Gráfica IA
+      <span class="kbd-badge">g</span>
     </div>
-    <!-- Duración -->
+    <div class="ai-row">
+      <input class="ai-input" id="chartTopic" placeholder="Ej: Top 5 países por PIB 2024…" autocomplete="off" style="font-size:14px;" />
+      <button class="btn primary" id="sendChartReq" style="width:auto;padding:13px 16px;">Generar</button>
+    </div>
     <div style="margin-top:10px;">
-      <div class="label-xs">⏱ Duración en pantalla</div>
+      <div class="label-xs">⏱ Duración <span class="kbd-badge" style="font-size:9px;">1–5</span></div>
       <div class="dur-row">
-        <button class="btn dur-pill" data-dur="15000">15 s</button>
-        <button class="btn dur-pill" data-dur="30000">30 s</button>
-        <button class="btn dur-pill" data-dur="60000">1 min</button>
-        <button class="btn dur-pill" data-dur="180000">3 min</button>
-        <button class="btn dur-pill active" data-dur="0">∞ Siempre</button>
+        <button class="btn dur-pill" data-dur="15000">15 s<kbd>1</kbd></button>
+        <button class="btn dur-pill" data-dur="30000">30 s<kbd>2</kbd></button>
+        <button class="btn dur-pill" data-dur="60000">1 min<kbd>3</kbd></button>
+        <button class="btn dur-pill" data-dur="180000">3 min<kbd>4</kbd></button>
+        <button class="btn dur-pill active" data-dur="0">∞ Siempre<kbd>5</kbd></button>
       </div>
     </div>
-    <!-- Último resultado -->
     <div id="chartResultBox" class="chart-result-box">
       <div class="chart-result-title" id="chartResultTitle"></div>
       <div class="chart-result-meta" id="chartResultMeta"></div>
     </div>
     <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
-      <button class="btn danger" id="hideChart" style="width:auto;padding:6px 12px;font-size:12px;border-radius:10px;">✕ Cerrar overlay</button>
+      <button class="btn danger" id="hideChart" style="width:auto;padding:6px 12px;font-size:12px;border-radius:10px;">✕ Cerrar</button>
       <div id="chartStatus" class="status-line" style="margin-top:0;flex:1;"></div>
     </div>
   </div>
 
-  <!-- ═══ 3. ESCRITOS ═══ -->
-  <div class="card">
-    <div class="card-title">✍️ Escritos</div>
-    <div class="grid2" id="escritosGrid"></div>
-    <div style="height:8px"></div>
-    <div class="toast-row">
-      <input id="customText" placeholder="Texto custom…" />
-      <button class="btn ghost" id="sendCustomText">Mostrar</button>
-    </div>
-  </div>
+  <!-- ═══ ZONA D: Herramientas secundarias (colapsada) ═══ -->
+  <details class="more-controls">
+    <summary>Más controles</summary>
+    <div class="details-body">
 
-  <!-- ═══ 4. REACCIONES ═══ -->
-  <div class="card">
-    <div class="card-title">🎉 Reacciones</div>
-    <div class="grid-react">
-      <button class="btn good btn-react" data-trigger="applause">👏 Aplausos</button>
-      <button class="btn warn btn-react" data-trigger="highlight">🔥 Highlight</button>
-      <button class="btn btn-react"      data-trigger="funny">😂 Funny</button>
-      <button class="btn warn btn-react" data-trigger="wtf">😳 WTF</button>
-      <button class="btn bad btn-react"  data-trigger="disagree">❌ Disagree</button>
-      <button class="btn ghost btn-react" data-trigger="keypoint">🧠 Key Point</button>
-    </div>
-  </div>
-
-  <!-- ═══ 5. MENSAJE RÁPIDO ═══ -->
-  <div class="card">
-    <div class="card-title">💬 Mensaje rápido</div>
-    <div class="toast-row">
-      <input id="toastMsg" placeholder="Escribe un mensaje…" />
-      <button class="btn primary" id="sendToast">Enviar</button>
-    </div>
-  </div>
-
-  <!-- ═══ 6. SEQUENCE ═══ -->
-  <div class="card">
-    <div class="card-title">🎬 Sequence</div>
-    <div class="seq-display">
-      <div class="seq-num" id="seqNum">—</div>
-      <div class="seq-info">
-        <div class="seq-name" id="seqName">TOP 5</div>
-        <div class="seq-label" id="seqLabel">Click Next to start</div>
+      <!-- Reacciones -->
+      <div>
+        <div class="details-section-title">🎉 Reacciones</div>
+        <div class="grid-react">
+          <button class="btn good btn-react" data-trigger="applause">👏 Aplausos</button>
+          <button class="btn warn btn-react" data-trigger="highlight">🔥 Highlight</button>
+          <button class="btn btn-react"      data-trigger="funny">😂 Funny</button>
+          <button class="btn warn btn-react" data-trigger="wtf">😳 WTF</button>
+          <button class="btn bad btn-react"  data-trigger="disagree">❌ Disagree</button>
+          <button class="btn ghost btn-react" data-trigger="keypoint">🧠 Key Point</button>
+        </div>
       </div>
-    </div>
-    <div class="grid3">
-      <button class="btn primary" id="seqNext">▶ Next</button>
-      <button class="btn ghost"   id="seqBack">↩ Back</button>
-      <button class="btn ghost"   id="seqReset">⟲ Reset</button>
-    </div>
-  </div>
 
-  <!-- ═══ 7. SPOILER ═══ -->
-  <div class="card">
-    <div class="card-title">⚠️ Spoiler Level</div>
-    <div class="grid3">
-      <button class="btn good" data-spoiler="safe">🔒 Safe</button>
-      <button class="btn warn" data-spoiler="light">⚠️ Light</button>
-      <button class="btn bad"  data-spoiler="full">☠️ Full</button>
-    </div>
-  </div>
+      <!-- Mensaje rápido -->
+      <div>
+        <div class="details-section-title">💬 Mensaje rápido</div>
+        <div class="toast-row">
+          <input id="toastMsg" placeholder="Escribe un mensaje…" />
+          <button class="btn primary" id="sendToast">Enviar</button>
+        </div>
+      </div>
 
-  <!-- ═══ 8. CONNECTION ═══ -->
+      <!-- Sequence -->
+      <div>
+        <div class="details-section-title">🎬 Sequence</div>
+        <div class="seq-display">
+          <div class="seq-num" id="seqNum">—</div>
+          <div class="seq-info">
+            <div class="seq-name" id="seqName">TOP 5</div>
+            <div class="seq-label" id="seqLabel">Click Next to start</div>
+          </div>
+        </div>
+        <div class="grid3">
+          <button class="btn primary" id="seqNext">▶ Next</button>
+          <button class="btn ghost"   id="seqBack">↩ Back</button>
+          <button class="btn ghost"   id="seqReset">⟲ Reset</button>
+        </div>
+      </div>
+
+      <!-- Spoiler -->
+      <div>
+        <div class="details-section-title">⚠️ Spoiler Level</div>
+        <div class="grid3">
+          <button class="btn good" data-spoiler="safe">🔒 Safe</button>
+          <button class="btn warn" data-spoiler="light">⚠️ Light</button>
+          <button class="btn bad"  data-spoiler="full">☠️ Full</button>
+        </div>
+      </div>
+
+    </div>
+  </details>
+
+  <!-- ═══ CONNECTION ═══ -->
   <div class="conn-toggle" id="connToggle">⚙️ Connection Settings</div>
   <div class="conn-panel" id="connPanel">
     <div class="conn-inner">
@@ -313,12 +423,21 @@
 
 </div><!-- /wrap -->
 
-<!-- Bottom Dock -->
+<!-- ═══ DOCK ═══ -->
 <div class="dock">
   <div class="dock-inner">
-    <button class="btn good"    id="bigApplause">👏 Aplausos</button>
-    <button class="btn warn"    id="bigHighlight">🔥 Highlight</button>
-    <button class="btn primary" id="bigNext">⏭️ Next</button>
+    <button class="dock-btn primary" id="dockAi">
+      🤖 Preguntar
+      <small>/</small>
+    </button>
+    <button class="dock-btn" id="dockChart">
+      📊 Gráfica
+      <small>g</small>
+    </button>
+    <button class="dock-btn hide-btn" id="dockHide">
+      ✕ Ocultar
+      <small>Esc</small>
+    </button>
   </div>
 </div>
 
@@ -329,47 +448,36 @@
   const $ = id => document.getElementById(id);
 
   // ═══ CONFIG ═══
-  const DEFAULT_TOKEN = "elias123";
-  const FRASES = [
-    "Amor y amistad",
-    "Feliz día del amor",
-    "Gracias por estar",
-    "Vibe coding con corazón",
-    "Pensamientos que unen",
-    "Celebramos juntos",
-    "Con cariño",
-    "La amistad es amor elegido"
-  ];
+  const DEFAULT_TOKEN    = "elias123";
+  const SETTINGS_KEY     = "obs_remote_v2";
+  const AI_HISTORY_KEY   = "obs_ai_history_v1";
 
   // ═══ State ═══
   const state = {
     ws: null,
     connected: false,
-    seq: { name: "top5", step: 0, max: 5, label: "" }
+    seq: { name: "top5", step: 0, max: 5, label: "" },
   };
-  const SETTINGS_KEY = "obs_remote_v2";
+  let chartDuration  = 0;
+  let lastAiQ        = "";
+  let aiHistory      = [];
+  let histIdx        = -1;
+  let histDraft      = "";
 
-  // ═══ URL auto-detect ═══
-  function isOnServer() {
-    return location.protocol !== "file:" && location.hostname !== "localhost";
-  }
+  // ═══ URL ═══
+  function isOnServer() { return location.protocol !== "file:" && location.hostname !== "localhost"; }
   function getAutoWsUrl() {
-    if (isOnServer()) {
-      return `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
-    }
+    if (isOnServer()) return `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
     return null;
-  }
-  function getDefaultToken() {
-    return isOnServer() ? DEFAULT_TOKEN : "";
   }
 
   // ═══ UI helpers ═══
-  function toast(msg, duration = 1200) {
+  function toast(msg, dur = 1300) {
     const el = $("toast");
     el.textContent = msg;
     el.classList.add("show");
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.remove("show"), duration);
+    toast._t = setTimeout(() => el.classList.remove("show"), dur);
   }
 
   function setStatus(ok, text) {
@@ -377,28 +485,59 @@
     $("statusText").textContent = text;
   }
 
-  function setStatusLine(elId, text, type = "") {
-    const el = $(elId);
+  function setStatusLine(id, text, cls = "") {
+    const el = $(id);
     if (!el) return;
     el.textContent = text;
-    el.className = "status-line" + (type ? " " + type : "");
+    el.className   = "status-line" + (cls ? " " + cls : "");
   }
 
   function updateSeqDisplay() {
     const { step, max, name, label } = state.seq;
-    const numEl   = $("seqNum");
-    const lblEl   = $("seqLabel");
-    const nameEl  = $("seqName");
-    if (!numEl || !lblEl || !nameEl) return;
-    if (step === 0) {
-      numEl.textContent = "—";
-      lblEl.textContent = "Click Next to start";
+    const nEl = $("seqNum"), lEl = $("seqLabel"), nmEl = $("seqName");
+    if (!nEl) return;
+    nEl.textContent  = step === 0 ? "—" : (name === "top5" ? `#${max - step + 1}` : step);
+    lEl.textContent  = step === 0 ? "Click Next to start" : (label || `Step ${step} of ${max}`);
+    nmEl.textContent = name.toUpperCase().replace("TOP5","TOP 5");
+  }
+
+  // ═══ History ═══
+  function loadHistory() {
+    try { aiHistory = JSON.parse(localStorage.getItem(AI_HISTORY_KEY) || "[]"); } catch { aiHistory = []; }
+  }
+  function saveHistory() {
+    try { localStorage.setItem(AI_HISTORY_KEY, JSON.stringify(aiHistory)); } catch {}
+    updateHistHint();
+  }
+  function pushHistory(q) {
+    aiHistory = [q, ...aiHistory.filter(x => x !== q)].slice(0, 8);
+    histIdx = -1; histDraft = "";
+    saveHistory();
+  }
+  function histUp() {
+    const inp = $("aiQuestion");
+    if (histIdx === -1) histDraft = inp.value;
+    if (histIdx < aiHistory.length - 1) histIdx++;
+    inp.value = aiHistory[histIdx] || histDraft;
+    requestAnimationFrame(() => inp.setSelectionRange(inp.value.length, inp.value.length));
+    updateHistHint();
+  }
+  function histDown() {
+    const inp = $("aiQuestion");
+    if (histIdx > 0) { histIdx--; inp.value = aiHistory[histIdx]; }
+    else if (histIdx === 0) { histIdx = -1; inp.value = histDraft; }
+    requestAnimationFrame(() => inp.setSelectionRange(inp.value.length, inp.value.length));
+    updateHistHint();
+  }
+  function updateHistHint() {
+    const h = $("histHint");
+    if (!h) return;
+    if (aiHistory.length === 0) { h.textContent = ""; return; }
+    if (histIdx >= 0) {
+      h.textContent = `↑↓  ${histIdx + 1} / ${aiHistory.length}`;
     } else {
-      const display = name === "top5" ? `#${max - step + 1}` : step;
-      numEl.textContent = display;
-      lblEl.textContent = label || `Step ${step} of ${max}`;
+      h.textContent = `↑ ${aiHistory.length} pregunta${aiHistory.length > 1 ? "s" : ""} en historial`;
     }
-    nameEl.textContent = name.toUpperCase().replace("TOP5", "TOP 5");
   }
 
   // ═══ Settings ═══
@@ -407,32 +546,26 @@
       const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
       if (s.wsUrl && $("wsUrl")) $("wsUrl").value = s.wsUrl;
       if (s.token && $("token"))  $("token").value  = s.token;
-    } catch (_) {}
+    } catch {}
   }
   function saveSettings() {
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify({
         wsUrl: $("wsUrl")?.value?.trim() || "",
-        token: $("token")?.value?.trim()  || ""
+        token: $("token")?.value?.trim()  || "",
       }));
-    } catch (_) {}
+    } catch {}
   }
 
   // ═══ WebSocket ═══
   function connect(url, token) {
     if (state.ws) state.ws.close();
 
-    let wsUrl = url || $("wsUrl").value.trim() || getAutoWsUrl();
-    const wsToken = token ?? $("token").value.trim();
+    let wsUrl    = url || $("wsUrl")?.value?.trim() || getAutoWsUrl();
+    const wsTok  = token ?? $("token")?.value?.trim();
 
-    if (!wsUrl) {
-      setStatus(false, "No URL");
-      $("connPanel").classList.add("open");
-      return;
-    }
-    if (wsToken) {
-      wsUrl += (wsUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(wsToken);
-    }
+    if (!wsUrl) { setStatus(false, "No URL"); $("connPanel").classList.add("open"); return; }
+    if (wsTok) wsUrl += (wsUrl.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(wsTok);
 
     try {
       state.ws = new WebSocket(wsUrl);
@@ -441,10 +574,9 @@
       state.ws.onopen = () => {
         state.connected = true;
         setStatus(true, "Connected");
-        toast("✓ Connected");
+        toast("✓ Conectado");
         saveSettings();
       };
-
       state.ws.onclose = (e) => {
         state.connected = false;
         if (e.code === 1008) {
@@ -455,16 +587,12 @@
           setStatus(false, "Disconnected");
         }
       };
-
-      state.ws.onerror = () => {
-        state.connected = false;
-        setStatus(false, "Error");
-      };
+      state.ws.onerror = () => { state.connected = false; setStatus(false, "Error"); };
 
       state.ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
-          if (msg.type === "ack") toast("✓ Enviado");
+          if (msg.type === "ack") return; // silent ack
 
           // ── IA Q&A ──
           if (msg.type === "ai_thinking") {
@@ -472,33 +600,28 @@
           }
           if (msg.type === "ai_response") {
             setStatusLine("aiStatus", "");
-            // Show response in the control
             const box = $("aiResponseBox");
-            const qEl = $("aiResponseQ");
-            const aEl = $("aiResponseA");
-            if (box && qEl && aEl) {
-              qEl.textContent = msg.question || "";
-              aEl.textContent = msg.answer   || "";
+            if (box) {
+              $("aiResponseQ").textContent = msg.question || "";
+              $("aiResponseA").textContent = msg.answer   || "";
               box.classList.add("show");
             }
           }
 
-          // ── Gráfica IA ──
+          // ── Gráfica ──
           if (msg.type === "chart_thinking") {
             setStatusLine("chartStatus", "📊 Generando gráfica…", "thinking");
           }
           if (msg.type === "chart_data") {
             setStatusLine("chartStatus", "");
-            const box   = $("chartResultBox");
-            const title = $("chartResultTitle");
-            const meta  = $("chartResultMeta");
-            if (box && title && meta) {
-              title.textContent = msg.title || "Gráfica en overlay";
-              const n    = (msg.labels || []).length;
-              const dur  = msg.duration === 0 ? "∞ Siempre" :
-                           msg.duration >= 60000 ? (msg.duration/60000).toFixed(0)+"min" :
-                           (msg.duration/1000)+"s";
-              meta.textContent = `${n} categorías · ${msg.theme || "neon"} · ${dur}`;
+            const box = $("chartResultBox");
+            if (box) {
+              $("chartResultTitle").textContent = msg.title || "Gráfica en overlay";
+              const n   = (msg.labels || []).length;
+              const dur = msg.duration === 0 ? "∞ Siempre"
+                : msg.duration >= 60000 ? (msg.duration/60000).toFixed(0)+"min"
+                : (msg.duration/1000)+"s";
+              $("chartResultMeta").textContent = `${n} categorías · ${msg.theme || "neon"} · ${dur}`;
               box.classList.add("show");
             }
           }
@@ -507,10 +630,7 @@
           }
         } catch {}
       };
-
-    } catch {
-      setStatus(false, "Failed");
-    }
+    } catch { setStatus(false, "Failed"); }
   }
 
   function send(payload) {
@@ -522,153 +642,219 @@
   }
 
   // ═══ Actions ═══
-  function sendToast() {
+  function sendAiQuestion(force) {
+    const inp = $("aiQuestion");
+    const q   = force ?? inp.value.trim();
+    if (!q) return toast("Escribe una pregunta");
+    send({ type: "ai_question", text: q });
+    inp.value = "";
+    lastAiQ   = q;
+    pushHistory(q);
+    $("aiResponseBox")?.classList.remove("show");
+    setStatusLine("aiStatus", "⏳ Enviando…", "thinking");
+  }
+
+  function repeatLastAi() {
+    if (!lastAiQ) return toast("No hay pregunta reciente");
+    send({ type: "ai_question", text: lastAiQ });
+    $("aiResponseBox")?.classList.remove("show");
+    setStatusLine("aiStatus", "⏳ Reenviando…", "thinking");
+    toast(`↩ ${lastAiQ.slice(0, 28)}${lastAiQ.length > 28 ? "…" : ""}`);
+  }
+
+  function sendChartRequest() {
+    const inp = $("chartTopic");
+    const t   = inp.value.trim();
+    if (!t) return toast("Escribe un tema para la gráfica");
+    send({ type: "chart_ai_request", topic: t, duration: chartDuration });
+    inp.value = "";
+    $("chartResultBox")?.classList.remove("show");
+    const durLabel = chartDuration === 0 ? "permanente"
+      : chartDuration >= 60000 ? (chartDuration/60000).toFixed(0)+"min"
+      : (chartDuration/1000)+"s";
+    setStatusLine("chartStatus", `⏳ Generando… (${durLabel})`, "thinking");
+  }
+
+  function sendHideAll() {
+    send({ type: "ai_hide" });
+    send({ type: "chart_hide" });
+    $("aiResponseBox")?.classList.remove("show");
+    $("chartResultBox")?.classList.remove("show");
+    setStatusLine("aiStatus", "");
+    setStatusLine("chartStatus", "");
+    toast("Esc · Overlays ocultos");
+  }
+
+  function sendMarker(trigger)  { send({ type: "marker", trigger, label: trigger }); toast(trigger); }
+  function sendSpoiler(level)   { send({ type: "spoiler", level }); toast(`Spoiler: ${level}`); }
+  function sendToastMsg() {
     const msg = $("toastMsg")?.value?.trim();
     if (!msg) return toast("Escribe un mensaje");
     send({ type: "toast", toast: { message: msg, variant: "info", durationMs: 2500 } });
     $("toastMsg").value = "";
   }
 
-  function sendMarker(trigger) {
-    send({ type: "marker", trigger, label: trigger });
-    toast(trigger);
+  function seqNext()  {
+    if (state.seq.step < state.seq.max) state.seq.step++; else state.seq.step = 1;
+    updateSeqDisplay(); send({ type: "sequence", action: "next", seq: state.seq });
   }
-
-  function sendSpoiler(level) {
-    send({ type: "spoiler", level });
-    toast(`Spoiler: ${level}`);
-  }
-
-  function seqNext() {
-    if (state.seq.step < state.seq.max) state.seq.step++;
-    else state.seq.step = 1;
-    updateSeqDisplay();
-    send({ type: "sequence", action: "next", seq: state.seq });
-  }
-  function seqBack() {
+  function seqBack()  {
     if (state.seq.step > 1) state.seq.step--;
-    updateSeqDisplay();
-    send({ type: "sequence", action: "back", seq: state.seq });
+    updateSeqDisplay(); send({ type: "sequence", action: "back", seq: state.seq });
   }
   function seqReset() {
     state.seq.step = 0;
-    updateSeqDisplay();
-    send({ type: "sequence", action: "reset", seq: state.seq });
+    updateSeqDisplay(); send({ type: "sequence", action: "reset", seq: state.seq });
   }
 
-  function sendScenePhrase(phraseId) { send({ type: "scene", phraseId }); }
-  function sendSceneText(text)       { send({ type: "scene", text: text.trim() }); }
+  // ═══ Keyboard shortcuts ═══
+  document.addEventListener("keydown", (e) => {
+    const active      = document.activeElement;
+    const isAiInput   = active === $("aiQuestion");
+    const isChartInput= active === $("chartTopic");
+    const isInInput   = active?.tagName === "INPUT" || active?.tagName === "TEXTAREA";
+
+    // Always: Escape
+    if (e.key === "Escape") {
+      active?.blur();
+      sendHideAll();
+      return;
+    }
+
+    // When in AI input: history + tab
+    if (isAiInput) {
+      if (e.key === "ArrowUp")   { e.preventDefault(); histUp();   return; }
+      if (e.key === "ArrowDown") { e.preventDefault(); histDown(); return; }
+      if (e.key === "Tab")       { e.preventDefault(); $("chartTopic").focus(); return; }
+      return;
+    }
+
+    // When in chart input: tab
+    if (isChartInput) {
+      if (e.key === "Tab") { e.preventDefault(); $("aiQuestion").focus(); return; }
+      return;
+    }
+
+    // When in any other input: ignore
+    if (isInInput) return;
+
+    // Global shortcuts (no input focused)
+    if (e.key === "/" || e.key === "?") { e.preventDefault(); $("aiQuestion").focus(); return; }
+    if (e.key === "g" || e.key === "G") { e.preventDefault(); $("chartTopic").focus(); return; }
+    if (e.key === "r" || e.key === "R") { e.preventDefault(); repeatLastAi(); return; }
+    if (e.key === "Tab")                { e.preventDefault(); $("aiQuestion").focus(); return; }
+
+    if (["1","2","3","4","5"].includes(e.key)) {
+      const pills = [...document.querySelectorAll(".dur-pill")];
+      const idx   = parseInt(e.key, 10) - 1;
+      if (pills[idx]) {
+        pills[idx].click();
+        toast(`Duración: ${pills[idx].textContent.replace(/\d$/,"").trim()}`);
+      }
+      return;
+    }
+  });
 
   // ═══ Wire ═══
   function wire() {
 
-    // ── Escritos ──
-    const escritosGrid = $("escritosGrid");
-    if (escritosGrid) {
-      FRASES.forEach((texto, i) => {
-        const btn = document.createElement("button");
-        btn.className = "btn ghost";
-        btn.textContent = texto.length > 18 ? texto.slice(0, 18) + "…" : texto;
-        btn.onclick = () => { sendScenePhrase(i); toast(texto.slice(0,20)); };
-        escritosGrid.appendChild(btn);
+    // ── Shortcut panel toggle ──
+    $("shortcutToggle")?.addEventListener("click", () => {
+      const p  = $("shortcutPanel");
+      const b  = $("shortcutToggle");
+      const on = p.style.display === "none";
+      p.style.display = on ? "block" : "none";
+      b.classList.toggle("active", on);
+    });
+
+    // ── AI input focus → dock highlight ──
+    $("aiQuestion")?.addEventListener("focus",  () => $("dockAi").classList.add("active"));
+    $("aiQuestion")?.addEventListener("blur",   () => $("dockAi").classList.remove("active"));
+    $("chartTopic")?.addEventListener("focus",  () => $("dockChart").classList.add("active"));
+    $("chartTopic")?.addEventListener("blur",   () => $("dockChart").classList.remove("active"));
+
+    // ── IA send ──
+    $("sendAiQuestion")?.addEventListener("click", () => sendAiQuestion());
+    $("aiQuestion")?.addEventListener("keydown", e => { if (e.key === "Enter") sendAiQuestion(); });
+    $("repeatAi")?.addEventListener("click", repeatLastAi);
+
+    // ── Quick chips ──
+    document.querySelectorAll(".chip").forEach(c => {
+      c.addEventListener("click", () => {
+        const inp = $("aiQuestion");
+        inp.value = c.dataset.chip;
+        inp.focus();
+        inp.setSelectionRange(inp.value.length, inp.value.length);
       });
-    }
-    $("sendCustomText")?.addEventListener("click", () => {
-      const v = $("customText")?.value?.trim();
-      if (v) { sendSceneText(v); $("customText").value = ""; }
-      else toast("Escribe un texto");
     });
 
-    // ── Duration pills ──
-    let chartDuration = 0;
-    document.querySelectorAll(".dur-pill").forEach(btn => {
-      btn.onclick = () => {
-        document.querySelectorAll(".dur-pill").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-        chartDuration = parseInt(btn.dataset.dur, 10);
-      };
-    });
-
-    // ── Gráfica IA ──
-    function sendChartRequest() {
-      const t = $("chartTopic")?.value?.trim();
-      if (!t) return toast("Escribe un tema para la gráfica");
-      send({ type: "chart_ai_request", topic: t, duration: chartDuration });
-      $("chartTopic").value = "";
-      // Clear old result
-      $("chartResultBox")?.classList.remove("show");
-      const durLabel = chartDuration === 0 ? "permanente"
-        : chartDuration >= 60000 ? (chartDuration/60000).toFixed(0)+"min"
-        : (chartDuration/1000)+"s";
-      setStatusLine("chartStatus", `⏳ Generando… (${durLabel})`, "thinking");
-    }
+    // ── Chart ──
     $("sendChartReq")?.addEventListener("click", sendChartRequest);
     $("chartTopic")?.addEventListener("keydown", e => { if (e.key === "Enter") sendChartRequest(); });
     $("hideChart")?.addEventListener("click", () => {
       send({ type: "chart_hide" });
       $("chartResultBox")?.classList.remove("show");
       setStatusLine("chartStatus", "");
-      toast("Overlay cerrado");
+      toast("Gráfica cerrada");
     });
 
-    // ── IA Pregunta ──
-    function sendAiQuestion() {
-      const q = $("aiQuestion")?.value?.trim();
-      if (!q) return toast("Escribe una pregunta");
-      send({ type: "ai_question", text: q });
-      $("aiQuestion").value = "";
-      // Clear old response
-      $("aiResponseBox")?.classList.remove("show");
-      setStatusLine("aiStatus", "⏳ Enviando…", "thinking");
-    }
-    $("sendAiQuestion")?.addEventListener("click", sendAiQuestion);
-    $("aiQuestion")?.addEventListener("keydown", e => { if (e.key === "Enter") sendAiQuestion(); });
+    // ── Duration pills ──
+    document.querySelectorAll(".dur-pill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".dur-pill").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        chartDuration = parseInt(btn.dataset.dur, 10);
+      });
+    });
 
-    // ── Reacciones ──
+    // ── Reactions ──
     document.querySelectorAll("[data-trigger]").forEach(btn => {
-      btn.onclick = () => sendMarker(btn.dataset.trigger);
+      btn.addEventListener("click", () => sendMarker(btn.dataset.trigger));
     });
 
-    // ── Mensaje rápido ──
-    $("sendToast")?.addEventListener("click", sendToast);
-    $("toastMsg")?.addEventListener("keydown", e => { if (e.key === "Enter") sendToast(); });
+    // ── Quick Toast ──
+    $("sendToast")?.addEventListener("click", sendToastMsg);
+    $("toastMsg")?.addEventListener("keydown", e => { if (e.key === "Enter") sendToastMsg(); });
 
     // ── Spoilers ──
     document.querySelectorAll("[data-spoiler]").forEach(btn => {
-      btn.onclick = () => sendSpoiler(btn.dataset.spoiler);
+      btn.addEventListener("click", () => sendSpoiler(btn.dataset.spoiler));
     });
 
     // ── Sequence ──
-    $("seqNext")?.addEventListener("click", seqNext);
-    $("seqBack")?.addEventListener("click", seqBack);
+    $("seqNext")?.addEventListener("click",  seqNext);
+    $("seqBack")?.addEventListener("click",  seqBack);
     $("seqReset")?.addEventListener("click", seqReset);
 
     // ── Dock ──
-    $("bigApplause")?.addEventListener("click",  () => sendMarker("applause"));
-    $("bigHighlight")?.addEventListener("click", () => sendMarker("highlight"));
-    $("bigNext")?.addEventListener("click",      () => sendMarker("next_segment"));
+    $("dockAi")?.addEventListener("click", () => {
+      const inp = $("aiQuestion");
+      inp.focus();
+      if (inp.value) inp.select();
+    });
+    $("dockChart")?.addEventListener("click", () => $("chartTopic").focus());
+    $("dockHide")?.addEventListener("click",  sendHideAll);
 
     // ── Connection ──
-    $("connToggle")?.addEventListener("click", () => $("connPanel")?.classList.toggle("open"));
-    $("connectBtn")?.addEventListener("click", () => connect());
-    $("disconnectBtn")?.addEventListener("click", () => {
-      state.ws?.close();
-      setStatus(false, "Disconnected");
-    });
-    $("wsUrl")?.addEventListener("change", saveSettings);
-    $("token")?.addEventListener("change", saveSettings);
+    $("connToggle")?.addEventListener("click",      () => $("connPanel")?.classList.toggle("open"));
+    $("connectBtn")?.addEventListener("click",      () => connect());
+    $("disconnectBtn")?.addEventListener("click",   () => { state.ws?.close(); setStatus(false, "Disconnected"); });
+    $("wsUrl")?.addEventListener("change",  saveSettings);
+    $("token")?.addEventListener("change",  saveSettings);
   }
 
   // ═══ Boot ═══
   loadSettings();
+  loadHistory();
   wire();
   updateSeqDisplay();
+  updateHistHint();
 
   const autoUrl = getAutoWsUrl();
   if (autoUrl) {
-    const token = $("token").value.trim() || getDefaultToken();
-    if (!$("token").value.trim() && token) $("token").value = token;
-    connect(autoUrl, token);
+    const tok = $("token")?.value?.trim() || DEFAULT_TOKEN;
+    if (!$("token")?.value?.trim() && tok) $("token").value = tok;
+    connect(autoUrl, tok);
   } else {
     setStatus(false, "Manual");
     $("connPanel").classList.add("open");
