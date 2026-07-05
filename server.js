@@ -336,6 +336,31 @@ app.get("/charts-overlay", (req, res) => {
   res.sendFile(p);
 });
 
+// ---------- CAOS Visual Engine ----------
+// Stage: single OBS browser source that hosts all scenes dynamically
+app.get("/stage", (req, res) => {
+  const p = path.join(PUBLIC_DIR, "scenes", "stage.html");
+  if (!fs.existsSync(p)) return res.status(404).send("Missing public/scenes/stage.html");
+  res.sendFile(p);
+});
+// Individual scene: /scene/keyword?text=BITCOIN — also usable standalone in OBS
+app.get("/scene/:name", (req, res) => {
+  const name = String(req.params.name || "");
+  if (!/^[a-z0-9-]+$/.test(name)) return res.status(400).send("Invalid scene name");
+  const p = path.join(PUBLIC_DIR, "scenes", `${name}.html`);
+  if (!fs.existsSync(p)) return res.status(404).send(`Unknown scene: ${name}`);
+  res.sendFile(p);
+});
+// Scene catalog (for control UI / future AI suggestions)
+app.get("/api/scenes", (_req, res) => {
+  const dir = path.join(PUBLIC_DIR, "scenes");
+  if (!fs.existsSync(dir)) return res.json({ scenes: [] });
+  const scenes = fs.readdirSync(dir)
+    .filter((f) => f.endsWith(".html") && f !== "stage.html")
+    .map((f) => f.replace(/\.html$/, ""));
+  res.json({ scenes });
+});
+
 // Root redirect
 app.get("/", (req, res) => {
   res.redirect("/control");

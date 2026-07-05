@@ -351,6 +351,38 @@
     </div>
   </div>
 
+  <!-- ═══ ESCENAS CAOS ═══ -->
+  <div class="card">
+    <div class="card-title">🎬 Escenas CAOS</div>
+
+    <!-- Keyword -->
+    <div class="label-xs">🔠 Keyword gigante</div>
+    <div class="ai-row">
+      <input class="ai-input" id="sceneKeyword" placeholder="BITCOIN…" autocomplete="off" style="font-size:14px;text-transform:uppercase;" />
+      <button class="btn primary" id="showKeyword" style="width:auto;padding:13px 16px;">Mostrar</button>
+    </div>
+
+    <!-- Metric -->
+    <div class="label-xs" style="margin-top:12px;">💰 Métrica</div>
+    <div class="ai-row">
+      <input class="ai-input" id="sceneMetricVal" placeholder="108500" autocomplete="off" style="font-size:14px;max-width:38%;" />
+      <input class="ai-input" id="sceneMetricLbl" placeholder="Precio de Bitcoin" autocomplete="off" style="font-size:14px;" />
+      <button class="btn primary" id="showMetric" style="width:auto;padding:13px 14px;">$</button>
+    </div>
+
+    <!-- Comparison -->
+    <div class="label-xs" style="margin-top:12px;">📊 Comparación (Nombre:Valor, …)</div>
+    <div class="ai-row">
+      <input class="ai-input" id="sceneCompare" placeholder="Bitcoin:2100,Gold:16000" autocomplete="off" style="font-size:13px;" />
+      <button class="btn primary" id="showCompare" style="width:auto;padding:13px 14px;">VS</button>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+      <button class="btn danger" id="hideScene" style="width:auto;padding:6px 12px;font-size:12px;border-radius:10px;">✕ Ocultar escena</button>
+      <div id="sceneStatus" class="status-line" style="margin-top:0;flex:1;"></div>
+    </div>
+  </div>
+
   <!-- ═══ ZONA D: Herramientas secundarias (colapsada) ═══ -->
   <details class="more-controls">
     <summary>Más controles</summary>
@@ -727,11 +759,46 @@
   function sendHideAll() {
     send({ type: "ai_hide" });
     send({ type: "chart_hide" });
+    send({ type: "scene_hide" });
     $("aiResponseBox")?.classList.remove("show");
     $("chartResultBox")?.classList.remove("show");
     setStatusLine("aiStatus", "");
     setStatusLine("chartStatus", "");
+    setStatusLine("sceneStatus", "");
     toast("Esc · Overlays ocultos");
+  }
+
+  // ── Escenas CAOS ──
+  function showScene(scene, params, statusMsg) {
+    send({ type: "scene_show", scene, params, duration: 0 });
+    setStatusLine("sceneStatus", statusMsg);
+    setTimeout(() => setStatusLine("sceneStatus", ""), 4000);
+  }
+
+  function showKeywordScene() {
+    const t = $("sceneKeyword")?.value?.trim();
+    if (!t) return toast("Escribe una palabra");
+    showScene("keyword", { text: t.toUpperCase() }, `🔠 ${t.toUpperCase()}`);
+    $("sceneKeyword").value = "";
+  }
+
+  function showMetricScene() {
+    const v = $("sceneMetricVal")?.value?.trim();
+    if (!v) return toast("Escribe un valor");
+    const label  = $("sceneMetricLbl")?.value?.trim() || "";
+    // "$108,500" → prefix "$" + numeric part; plain numbers pass through
+    const m      = v.match(/^([^0-9\-.]*)([\d,.\-]+)(.*)$/);
+    const params = m
+      ? { prefix: m[1].trim(), value: m[2], suffix: m[3].trim(), label }
+      : { value: v, label };
+    showScene("key-metric", params, `💰 ${v}${label ? " · " + label : ""}`);
+  }
+
+  function showCompareScene() {
+    const items = $("sceneCompare")?.value?.trim();
+    if (!items || !items.includes(":")) return toast("Formato: Nombre:Valor,Nombre:Valor");
+    const first = items.split(",")[0].split(":")[0].trim();
+    showScene("bar-compare", { items, title: `${first} vs el resto`, highlight: first }, `📊 ${first} vs…`);
   }
 
   function sendMarker(trigger)  { send({ type: "marker", trigger, label: trigger }); toast(trigger); }
@@ -854,6 +921,19 @@
         btn.classList.add("active");
         chartDuration = parseInt(btn.dataset.dur, 10);
       });
+    });
+
+    // ── Escenas CAOS ──
+    $("showKeyword")?.addEventListener("click", showKeywordScene);
+    $("sceneKeyword")?.addEventListener("keydown", e => { if (e.key === "Enter") showKeywordScene(); });
+    $("showMetric")?.addEventListener("click", showMetricScene);
+    $("sceneMetricLbl")?.addEventListener("keydown", e => { if (e.key === "Enter") showMetricScene(); });
+    $("showCompare")?.addEventListener("click", showCompareScene);
+    $("sceneCompare")?.addEventListener("keydown", e => { if (e.key === "Enter") showCompareScene(); });
+    $("hideScene")?.addEventListener("click", () => {
+      send({ type: "scene_hide" });
+      setStatusLine("sceneStatus", "");
+      toast("Escena oculta");
     });
 
     // ── Reactions ──

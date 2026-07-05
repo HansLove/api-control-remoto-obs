@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>CAOS · Keyword</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/scenes/caos.css">
+<style>
+  /*
+    CAOS scene: KEYWORD
+    Giant cinematic concept word.
+    Params:
+      ?text=BITCOIN        the word (auto-uppercased)
+      &sub=digital energy  optional subtitle
+      &accent=orange|green|blue|white
+  */
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 26px;
+  }
+
+  /* Faint drifting grid behind the word */
+  #stage::before {
+    content: '';
+    position: absolute; inset: -20%;
+    background-image:
+      linear-gradient(rgba(var(--accent-rgb), 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(var(--accent-rgb), 0.05) 1px, transparent 1px);
+    background-size: 80px 80px;
+    animation: caosGridDrift 14s linear infinite;
+    mask-image: radial-gradient(ellipse 60% 45% at 50% 50%, #000 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 60% 45% at 50% 50%, #000 30%, transparent 75%);
+  }
+
+  #word {
+    font-weight: 900;
+    font-size: clamp(64px, 13vw, 230px);
+    letter-spacing: 0.02em;
+    line-height: 1;
+    text-transform: uppercase;
+    text-align: center;
+    color: var(--caos-white);
+    text-shadow:
+      0 0 60px rgba(var(--accent-rgb), 0.35),
+      0 0 140px rgba(var(--accent-rgb), 0.18);
+    animation: caosRevealScale 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+    padding: 0 40px;
+    max-width: 96vw;
+    overflow-wrap: break-word;
+  }
+
+  #underline {
+    width: min(46vw, 560px);
+    height: 4px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.7);
+    transform-origin: center;
+    animation: caosLineGrow 0.7s 0.45s cubic-bezier(0.16, 1, 0.3, 1) both,
+               caosGlowPulse 3s 1.2s ease-in-out infinite;
+  }
+
+  #sub {
+    font-weight: 700;
+    font-size: clamp(16px, 2vw, 30px);
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--caos-muted);
+    animation: caosRevealUp 0.8s 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+    text-align: center;
+    padding: 0 40px;
+  }
+  #sub:empty { display: none; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="word"></div>
+  <div id="underline"></div>
+  <div id="sub"></div>
+</div>
+<script>
+  const P = new URLSearchParams(location.search);
+  document.body.dataset.accent = P.get('accent') || 'orange';
+  document.getElementById('word').textContent = P.get('text') || 'BITCOIN';
+  document.getElementById('sub').textContent  = P.get('sub')  || '';
+</script>
+</body>
+</html>

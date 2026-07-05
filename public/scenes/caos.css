@@ -1,0 +1,62 @@
+/* ═══════════════════════════════════════════════════════════════
+   CAOS VISUAL ENGINE — shared design language
+   Bitcoin-native · cinematic · dark · minimal
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  --caos-orange:      #f7931a;
+  --caos-orange-soft: rgba(247, 147, 26, 0.85);
+  --caos-green:       #27d17f;
+  --caos-blue:        #6aa9ff;
+  --caos-white:       #f4f7ff;
+  --caos-muted:       rgba(190, 205, 230, 0.55);
+  --caos-ink:         rgba(4, 7, 14, 0.85);
+
+  --caos-font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --caos-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--caos-font);
+  color: var(--caos-white);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Accent color themes (set via ?accent=) ── */
+body[data-accent="orange"] { --accent: var(--caos-orange); --accent-rgb: 247,147,26; }
+body[data-accent="green"]  { --accent: var(--caos-green);  --accent-rgb: 39,209,127; }
+body[data-accent="blue"]   { --accent: var(--caos-blue);   --accent-rgb: 106,169,255; }
+body[data-accent="white"]  { --accent: var(--caos-white);  --accent-rgb: 244,247,255; }
+body { --accent: var(--caos-orange); --accent-rgb: 247,147,26; }
+
+/* ── Shared cinematic entrance keyframes ── */
+@keyframes caosRevealUp {
+  from { opacity: 0; transform: translateY(46px); filter: blur(10px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0); }
+}
+@keyframes caosRevealScale {
+  from { opacity: 0; transform: scale(0.86); filter: blur(14px); letter-spacing: 0.3em; }
+  to   { opacity: 1; transform: scale(1);    filter: blur(0);    letter-spacing: 0.02em; }
+}
+@keyframes caosLineGrow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+@keyframes caosGlowPulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+@keyframes caosFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-8px); }
+}
+@keyframes caosGridDrift {
+  from { background-position: 0 0; }
+  to   { background-position: 80px 80px; }
+}

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>CAOS · Key Metric</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/scenes/caos.css">
+<style>
+  /*
+    CAOS scene: KEY METRIC
+    Giant statistic with count-up animation.
+    Params:
+      ?value=108500        numeric part (animates from 0)
+      &prefix=$            shown before the number
+      &suffix= PH/s        shown after the number
+      &label=Precio de Bitcoin
+      &decimals=0
+      &accent=orange|green|blue|white
+    Non-numeric value (e.g. value=21%20MILLION) renders without count-up.
+  */
+  #stage {
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+  }
+
+  /* Radial glow behind the figure */
+  #stage::before {
+    content: '';
+    position: absolute;
+    width: 70vw; height: 44vh;
+    background: radial-gradient(ellipse, rgba(var(--accent-rgb), 0.12), transparent 68%);
+    animation: caosGlowPulse 4s ease-in-out infinite;
+  }
+
+  #metric {
+    font-family: var(--caos-mono);
+    font-weight: 800;
+    font-size: clamp(72px, 12.5vw, 220px);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    display: flex; align-items: baseline;
+    animation: caosRevealScale 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+    white-space: nowrap;
+  }
+  #prefix, #suffix {
+    color: var(--accent);
+    text-shadow: 0 0 50px rgba(var(--accent-rgb), 0.5);
+  }
+  #suffix { font-size: 0.42em; margin-left: 0.18em; letter-spacing: 0.04em; }
+  #number {
+    color: var(--caos-white);
+    text-shadow: 0 0 60px rgba(var(--accent-rgb), 0.3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  #label {
+    font-weight: 800;
+    font-size: clamp(15px, 1.9vw, 28px);
+    letter-spacing: 0.4em;
+    text-transform: uppercase;
+    color: var(--caos-muted);
+    animation: caosRevealUp 0.8s 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    text-align: center;
+    padding: 0 40px;
+  }
+  #label:empty { display: none; }
+
+  #tick {
+    width: 60px; height: 3px; border-radius: 3px;
+    background: var(--accent);
+    box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.8);
+    transform-origin: center;
+    animation: caosLineGrow 0.6s 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="metric">
+    <span id="prefix"></span><span id="number">0</span><span id="suffix"></span>
+  </div>
+  <div id="tick"></div>
+  <div id="label"></div>
+</div>
+<script>
+  const P = new URLSearchParams(location.search);
+  document.body.dataset.accent = P.get('accent') || 'orange';
+
+  const rawValue = P.get('value')  || '108500';
+  const decimals = parseInt(P.get('decimals') || '0', 10);
+  document.getElementById('prefix').textContent = P.get('prefix') || '';
+  document.getElementById('suffix').textContent = P.get('suffix') || '';
+  document.getElementById('label').textContent  = P.get('label')  || '';
+
+  const numEl  = document.getElementById('number');
+  // Accept "108,500" / "108500.5"; anything non-numeric renders literally
+  const target = parseFloat(rawValue.replace(/,/g, ''));
+
+  if (Number.isFinite(target)) {
+    const DURATION = 1600;
+    const t0 = performance.now();
+    function frame(t) {
+      const p     = Math.min((t - t0) / DURATION, 1);
+      const eased = 1 - Math.pow(1 - p, 4); // easeOutQuart
+      numEl.textContent = (target * eased).toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      });
+      if (p < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  } else {
+    numEl.textContent = rawValue.toUpperCase();
+  }
+</script>
+</body>
+</html>
