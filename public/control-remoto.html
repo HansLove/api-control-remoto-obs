@@ -185,6 +185,54 @@
     .grid-react{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
     .btn-react{padding:18px 10px !important;font-size:15px !important;border-radius:16px !important;}
 
+    /* ── Voice mode ── */
+    .card-voice{border-color:rgba(247,147,26,.22);}
+    .mic-btn{
+      width:100%;padding:16px;border-radius:14px;border:1px solid var(--border);
+      background:rgba(255,255,255,.04);color:var(--text);
+      font-size:15px;font-weight:800;cursor:pointer;transition:all .15s;
+      display:flex;align-items:center;justify-content:center;gap:10px;
+    }
+    .mic-btn:active{transform:scale(.98);}
+    .mic-btn.live{
+      background:rgba(255,77,109,.16);border-color:rgba(255,77,109,.45);color:#ff8098;
+    }
+    .mic-btn.live .mic-ico{animation:micPulse 1.1s ease-in-out infinite;}
+    @keyframes micPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(1.2);}}
+    .transcript{
+      margin-top:10px;padding:10px 12px;min-height:44px;
+      background:var(--surface2);border-radius:12px;
+      font-size:13px;line-height:1.45;color:var(--muted);
+    }
+    .transcript .interim{opacity:.5;font-style:italic;}
+    .voice-counters{display:flex;gap:8px;margin-top:10px;}
+    .vc{
+      flex:1;text-align:center;padding:8px 4px;border-radius:10px;
+      background:var(--surface2);border:1px solid var(--border);
+    }
+    .vc-num{font-size:20px;font-weight:800;font-family:ui-monospace,monospace;line-height:1;}
+    .vc-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:3px;}
+    .vc.heard  .vc-num{color:var(--muted);}
+    .vc.sent   .vc-num{color:var(--caos-orange,#f7931a);}
+    .vc.shown  .vc-num{color:var(--good);}
+    .mode-row{display:flex;gap:6px;margin-top:10px;}
+    .mode-pill{
+      flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);
+      background:rgba(255,255,255,.03);color:var(--muted);
+      font-size:12px;font-weight:700;cursor:pointer;text-align:center;transition:all .12s;
+    }
+    .mode-pill.active{background:rgba(247,147,26,.16);border-color:rgba(247,147,26,.4);color:#f7a83a;}
+    .suggestion{
+      display:none;margin-top:10px;padding:12px;border-radius:12px;
+      background:rgba(247,147,26,.08);border:1px solid rgba(247,147,26,.28);
+      animation:fadeIn .2s ease;
+    }
+    .suggestion.show{display:block;}
+    .sugg-src{font-size:11px;color:var(--muted);font-style:italic;margin-bottom:4px;}
+    .sugg-desc{font-size:14px;font-weight:700;margin-bottom:10px;}
+    .sugg-actions{display:flex;gap:8px;}
+    .sugg-actions .btn{flex:1;padding:10px;font-size:13px;}
+
     /* ── Collapsible secondary controls ── */
     details.more-controls{
       background:var(--surface);border:1px solid var(--border);
@@ -349,6 +397,43 @@
       <button class="btn danger" id="hideChart" style="width:auto;padding:6px 12px;font-size:12px;border-radius:10px;">✕ Cerrar</button>
       <div id="chartStatus" class="status-line" style="margin-top:0;flex:1;"></div>
     </div>
+  </div>
+
+  <!-- ═══ MODO VOZ (LIVE) ═══ -->
+  <div class="card card-voice">
+    <div class="card-title">🎙️ Modo Voz · IA escucha</div>
+
+    <button class="mic-btn" id="micBtn">
+      <span class="mic-ico">🎙️</span>
+      <span id="micLabel">Empezar a escuchar</span>
+    </button>
+
+    <div class="transcript" id="transcript">Presiona el micrófono y habla. La IA solo interpreta frases con intención real — el resto se filtra gratis, sin gastar tokens.</div>
+
+    <!-- Mode: auto-show vs suggest -->
+    <div class="mode-row">
+      <div class="mode-pill active" id="modeSuggest" data-mode="suggest">💡 Sugerir</div>
+      <div class="mode-pill" id="modeAuto" data-mode="auto">⚡ Automático</div>
+    </div>
+
+    <!-- Token firewall counters -->
+    <div class="voice-counters">
+      <div class="vc heard"><div class="vc-num" id="vcHeard">0</div><div class="vc-lbl">Oídas</div></div>
+      <div class="vc sent"><div class="vc-num" id="vcSent">0</div><div class="vc-lbl">A Claude</div></div>
+      <div class="vc shown"><div class="vc-num" id="vcShown">0</div><div class="vc-lbl">Mostradas</div></div>
+    </div>
+
+    <!-- Suggestion gate -->
+    <div class="suggestion" id="suggestion">
+      <div class="sugg-src" id="suggSrc"></div>
+      <div class="sugg-desc" id="suggDesc"></div>
+      <div class="sugg-actions">
+        <button class="btn primary" id="suggShow">✓ Mostrar</button>
+        <button class="btn ghost" id="suggIgnore">✕ Ignorar</button>
+      </div>
+    </div>
+
+    <div id="voiceStatus" class="status-line"></div>
   </div>
 
   <!-- ═══ ESCENAS CAOS ═══ -->
@@ -697,6 +782,11 @@
             clearTimeout(chartGenTimer);
             setStatusLine("chartStatus", "❌ " + (msg.message || "Error"), "error");
           }
+
+          // ── Voz: resultado de interpretación ──
+          if (msg.type === "interpret_result") {
+            handleInterpretResult(msg);
+          }
         } catch {}
       };
     } catch { setStatus(false, "Failed"); }
@@ -762,6 +852,8 @@
     send({ type: "scene_hide" });
     $("aiResponseBox")?.classList.remove("show");
     $("chartResultBox")?.classList.remove("show");
+    $("suggestion")?.classList.remove("show");
+    if (typeof voice !== "undefined") voice.pending = null;
     setStatusLine("aiStatus", "");
     setStatusLine("chartStatus", "");
     setStatusLine("sceneStatus", "");
@@ -799,6 +891,174 @@
     if (!items || !items.includes(":")) return toast("Formato: Nombre:Valor,Nombre:Valor");
     const first = items.split(",")[0].split(":")[0].trim();
     showScene("bar-compare", { items, title: `${first} vs el resto`, highlight: first }, `📊 ${first} vs…`);
+  }
+
+  // ═══════════════════════════════════════════════════════════
+  //  MODO VOZ — token firewall de 3 capas
+  //  0: Web Speech API (transcripción gratis en el navegador)
+  //  1: filtro local (gratis) — palabra-gatillo + longitud + cooldown + dedupe
+  //  2: Claude interpreta (solo frases candidatas)  → interpret_result
+  //  3: puerta de confirmación (modo Sugerir) o auto (modo Automático)
+  // ═══════════════════════════════════════════════════════════
+  const voice = {
+    recog: null,
+    listening: false,
+    mode: "suggest",          // "suggest" | "auto"
+    lastSentAt: 0,
+    lastText: "",
+    cooldownMs: 6000,         // no más de 1 interpretación cada 6 s
+    minWords: 3,
+    pending: null,            // última sugerencia recibida
+    counters: { heard: 0, sent: 0, shown: 0 },
+  };
+
+  // Palabras-gatillo: si la frase contiene alguna (o un número), es candidata.
+  const VOICE_TRIGGERS = [
+    "bitcoin","btc","precio","vale","cuesta","cuestan","dólar","dolar","dólares","dolares",
+    "millón","millones","billón","billones","trillón","trillones","mil","porciento","por ciento",
+    "compara","comparado","comparación","versus","hashrate","energía","energia",
+    "muestra","gráfica","grafica","dato","estadística","estadistica","cifra","adopción","adopcion",
+    "oro","gold","liquidez","minería","mineria","red","network","inflación","inflacion","%"
+  ];
+
+  function voiceSupported() {
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  }
+
+  function updateVoiceCounters() {
+    $("vcHeard").textContent = voice.counters.heard;
+    $("vcSent").textContent  = voice.counters.sent;
+    $("vcShown").textContent = voice.counters.shown;
+  }
+
+  // Capa 1: filtro local gratuito
+  function passesLocalGate(text) {
+    const t = text.toLowerCase().trim();
+    const words = t.split(/\s+/).filter(Boolean);
+    if (words.length < voice.minWords) return false;
+    if (Date.now() - voice.lastSentAt < voice.cooldownMs) return false;
+    if (t === voice.lastText) return false;
+    const hasTrigger = /\d/.test(t) || VOICE_TRIGGERS.some(k => t.includes(k));
+    return hasTrigger;
+  }
+
+  function startVoice() {
+    if (!voiceSupported()) {
+      setStatusLine("voiceStatus", "❌ Tu navegador no soporta reconocimiento de voz (usa Chrome).", "error");
+      return;
+    }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const r = new SR();
+    r.lang = "es-ES";
+    r.continuous = true;
+    r.interimResults = true;
+
+    r.onresult = (ev) => {
+      let interim = "", finalTxt = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const chunk = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalTxt += chunk;
+        else interim += chunk;
+      }
+      // Mostrar transcripción viva
+      $("transcript").innerHTML = (voice.lastFinal ? `<span>${voice.lastFinal}</span> ` : "")
+        + (interim ? `<span class="interim">${interim}</span>` : "");
+
+      if (finalTxt.trim()) {
+        voice.lastFinal = finalTxt.trim();
+        voice.counters.heard++;
+        updateVoiceCounters();
+        // Capa 1
+        if (passesLocalGate(finalTxt)) {
+          sendToInterpret(finalTxt.trim());
+        }
+      }
+    };
+    r.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        setStatusLine("voiceStatus", "❌ Permiso de micrófono denegado.", "error");
+        stopVoice();
+      }
+    };
+    r.onend = () => {
+      // Auto-reinicia si sigue en modo escucha (Chrome corta cada ~60s)
+      if (voice.listening) { try { r.start(); } catch {} }
+    };
+
+    voice.recog = r;
+    voice.listening = true;
+    try { r.start(); } catch {}
+    $("micBtn").classList.add("live");
+    $("micLabel").textContent = "Escuchando… (toca para parar)";
+    setStatusLine("voiceStatus", "");
+  }
+
+  function stopVoice() {
+    voice.listening = false;
+    try { voice.recog?.stop(); } catch {}
+    voice.recog = null;
+    $("micBtn").classList.remove("live");
+    $("micLabel").textContent = "Empezar a escuchar";
+  }
+
+  // Capa 2: mandar a Claude (solo frases candidatas)
+  function sendToInterpret(text) {
+    voice.lastSentAt = Date.now();
+    voice.lastText   = text.toLowerCase().trim();
+    voice.counters.sent++;
+    updateVoiceCounters();
+    send({ type: "interpret_speech", text, reqId: String(Date.now()) });
+    setStatusLine("voiceStatus", "🧠 Interpretando…", "thinking");
+  }
+
+  // Traduce un resultado de interpretación a texto legible
+  function describeInterpretation(r) {
+    if (r.action === "scene" && r.scene === "keyword")     return `🔠 Keyword: ${r.params?.text || "?"}`;
+    if (r.action === "scene" && r.scene === "key-metric")  return `💰 Métrica: ${r.params?.prefix||""}${r.params?.value||"?"}${r.params?.suffix||""} · ${r.params?.label||""}`;
+    if (r.action === "scene" && r.scene === "bar-compare") return `📊 ${r.params?.title || "Comparación"}`;
+    if (r.action === "chart")                              return `📈 Gráfica: ${r.chart?.title || "?"}`;
+    return "—";
+  }
+
+  // Ejecuta la visualización interpretada
+  function applyInterpretation(r) {
+    if (r.action === "scene" && r.scene) {
+      send({ type: "scene_show", scene: r.scene, params: r.params || {}, duration: 0 });
+    } else if (r.action === "chart" && r.chart) {
+      send({ type: "chart_data", ...r.chart });
+    } else {
+      return false;
+    }
+    voice.counters.shown++;
+    updateVoiceCounters();
+    return true;
+  }
+
+  // Capa 3: recibe interpret_result → auto o sugerir
+  function handleInterpretResult(msg) {
+    setStatusLine("voiceStatus", "");
+    const r = msg.result || { action: "none" };
+
+    if (r.action === "none") {
+      // Se coló parloteo; Claude lo descartó. No molestar.
+      setStatusLine("voiceStatus", `· "${(msg.sourceText||"").slice(0,40)}…" → sin visual`, "");
+      setTimeout(() => setStatusLine("voiceStatus", ""), 2500);
+      return;
+    }
+
+    if (voice.mode === "auto") {
+      if (applyInterpretation(r)) {
+        toast("⚡ " + describeInterpretation(r), 2000);
+      }
+      return;
+    }
+
+    // Modo Sugerir: mostrar la puerta de confirmación
+    voice.pending = r;
+    $("suggSrc").textContent  = `"${msg.sourceText || ""}"`;
+    $("suggDesc").textContent = describeInterpretation(r)
+      + (typeof r.confidence === "number" ? `  ·  ${Math.round(r.confidence*100)}%` : "");
+    $("suggestion").classList.add("show");
   }
 
   function sendMarker(trigger)  { send({ type: "marker", trigger, label: trigger }); toast(trigger); }
@@ -921,6 +1181,34 @@
         btn.classList.add("active");
         chartDuration = parseInt(btn.dataset.dur, 10);
       });
+    });
+
+    // ── Modo Voz ──
+    if (!voiceSupported()) {
+      $("micLabel").textContent = "Voz no soportada (usa Chrome)";
+      $("micBtn").style.opacity = ".5";
+    }
+    $("micBtn")?.addEventListener("click", () => {
+      if (voice.listening) stopVoice(); else startVoice();
+    });
+    document.querySelectorAll(".mode-pill").forEach(p => {
+      p.addEventListener("click", () => {
+        document.querySelectorAll(".mode-pill").forEach(x => x.classList.remove("active"));
+        p.classList.add("active");
+        voice.mode = p.dataset.mode;
+        toast(voice.mode === "auto" ? "⚡ Modo automático" : "💡 Modo sugerir");
+      });
+    });
+    $("suggShow")?.addEventListener("click", () => {
+      if (voice.pending && applyInterpretation(voice.pending)) {
+        toast("✓ " + describeInterpretation(voice.pending), 1800);
+      }
+      voice.pending = null;
+      $("suggestion").classList.remove("show");
+    });
+    $("suggIgnore")?.addEventListener("click", () => {
+      voice.pending = null;
+      $("suggestion").classList.remove("show");
     });
 
     // ── Escenas CAOS ──

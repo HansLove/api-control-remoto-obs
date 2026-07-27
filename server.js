@@ -33,6 +33,9 @@ const TOKEN = String(process.env.OBS_REMOTE_TOKEN || "changeme"); // set in env 
 const LOG_DIR = process.env.LOG_DIR || path.join(process.cwd(), "logs");
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || "";
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-haiku-4-5-20251001";
+// Voice interpretation runs on EVERY candidate phrase, so it defaults to the
+// cheapest model. Override with INTERPRET_MODEL if you want more nuance.
+const INTERPRET_MODEL = process.env.INTERPRET_MODEL || "claude-haiku-4-5-20251001";
 const MINING_TEACHER_PIN = String(process.env.MINING_TEACHER_PIN || "2024");
 
 // ---------- Bitcoin mining game session (in-memory) ----------
@@ -310,6 +313,83 @@ Reglas:
   });
 }
 
+// ---------- Claude AI helper: interpret live speech → visual ----------
+// Layer 2 of the token firewall. Only candidate phrases (already filtered
+// client-side) reach this. Returns {action:"none"|"scene"|"chart", ...}.
+function callClaudeForInterpret(transcript) {
+  if (!ANTHROPIC_API_KEY) return Promise.reject(new Error("ANTHROPIC_API_KEY no configurada."));
+
+  const body = JSON.stringify({
+    model: INTERPRET_MODEL,
+    max_tokens: 320,
+    system: `Eres el director visual de un stream en vivo. Recibes un fragmento de lo que el presentador acaba de decir. Decide si amerita mostrar un visual y cuál.
+
+Responde SOLO con JSON válido, sin markdown ni texto extra. Una de estas formas:
+
+{"action":"none"}
+  cuando el fragmento es relleno, saludo, charla ambigua, o no pide datos/comparación/concepto concreto. ANTE LA DUDA, usa esto.
+
+{"action":"scene","scene":"keyword","params":{"text":"BITCOIN","sub":"opcional"},"confidence":0.0}
+  para resaltar UN concepto o palabra clave gigante.
+
+{"action":"scene","scene":"key-metric","params":{"value":"108500","prefix":"$","suffix":"","label":"Precio de Bitcoin"},"confidence":0.0}
+  para UNA estadística o cifra concreta.
+
+{"action":"scene","scene":"bar-compare","params":{"items":"Bitcoin:2100,Gold:16000,Real Estate:330000","unit":"B USD","highlight":"Bitcoin","title":"Bitcoin vs activos"},"confidence":0.0}
+  para comparar 2 o más cosas con cifras.
+
+{"action":"chart","chart":{"title":"...","labels":["A","B","C"],"values":[1,2,3],"unit":"...","chart_type":"horizontalBar","theme":"neon","duration":20000},"confidence":0.0}
+  para un ranking o serie de varios datos.
+
+Reglas:
+- Ante la duda, {"action":"none"}. Mejor no mostrar que mostrar basura.
+- Si el presentador no dijo cifras exactas, usa valores reales aproximados conocidos.
+- Máximo 1 visual por fragmento.
+- confidence de 0 a 1: qué tan seguro estás de que este visual ayuda.`,
+    messages: [{ role: "user", content: transcript }],
+  });
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: "api.anthropic.com",
+        path: "/v1/messages",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": ANTHROPIC_API_KEY,
+          "anthropic-version": "2023-06-01",
+          "Content-Length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          try {
+            const parsed = JSON.parse(data);
+            let text = parsed.content?.[0]?.text || "";
+            text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) text = jsonMatch[0];
+            const result = JSON.parse(text);
+            if (!result || typeof result !== "object" || !result.action) {
+              return resolve({ action: "none" });
+            }
+            resolve(result);
+          } catch {
+            // On any parse failure, fail safe to "none" (never a stuck state)
+            resolve({ action: "none" });
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 // Serve static files from ./public
 const PUBLIC_DIR = path.join(process.cwd(), "public");
 if (fs.existsSync(PUBLIC_DIR)) app.use(express.static(PUBLIC_DIR));
@@ -532,6 +612,41 @@ wss.on("connection", (ws, req) => {
         })
         .catch((err) => broadcast({ type: "chart_error", message: "Error: " + err.message, serverTs: nowISO() }));
       appendLog({ type: "chart_ai_request", topic, durationOverride, serverTs: nowISO(), client: { id, role, ip } });
+      return;
+    }
+
+    // Voice interpret: candidate phrase → Claude decides the visual.
+    // Server only interprets and returns the result; the control decides
+    // whether to auto-fire or ask for confirmation (keeps 1 Claude call max).
+    if (msg.type === "interpret_speech") {
+      const transcript = String(msg.text || "").trim().slice(0, 400);
+      if (!transcript) {
+        ws.send(JSON.stringify({ type: "ack", ok: false, message: "Empty transcript" }));
+        return;
+      }
+      const reqId = String(msg.reqId || "");
+      ws.send(JSON.stringify({ type: "ack", ok: true, message: "interpreting" }));
+      callClaudeForInterpret(transcript)
+        .then((result) => {
+          // Send only to the requesting control, not the overlays
+          ws.send(JSON.stringify({
+            type: "interpret_result",
+            reqId,
+            sourceText: transcript,
+            result,
+            serverTs: nowISO(),
+          }));
+        })
+        .catch((err) => {
+          ws.send(JSON.stringify({
+            type: "interpret_result",
+            reqId,
+            sourceText: transcript,
+            result: { action: "none", error: err.message },
+            serverTs: nowISO(),
+          }));
+        });
+      appendLog({ type: "interpret_speech", transcript, serverTs: nowISO(), client: { id, role, ip } });
       return;
     }
 
