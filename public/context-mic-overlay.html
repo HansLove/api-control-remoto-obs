@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Micrófono de Contexto — 9:16</title>
+  <!--
+    OBS Browser Source: 1080 × 1920 (vertical 9:16), fondo transparente.
+    Modo MANUAL: no rota solo. Cada tarjeta aparece cuando la disparas desde
+    el control móvil, con sonido de alerta, y se queda hasta que la ocultes
+    o dispares la siguiente.
+
+    URL:   /context?token=TU_TOKEN           (recomendado)
+    o:     context-mic-overlay.html?token=TU_TOKEN
+    Params opcionales:
+      ?pkg=3        paquete por defecto (default: 3)
+      ?role=overlay rol WS (default: overlay)
+      ?mute=1       desactiva el sonido de alerta
+      ?wsBase=ws://host:puerto   fuerza el WS (default: mismo host del overlay)
+
+    Contenido de los episodios: context-mic-content.js (agrega paquetes nuevos ahí).
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <script src="context-mic-content.js"></script>
+  <style>
+    :root{
+      --bg:#060710;
+      --text:#f4f7ff;
+      --muted:rgba(230,238,255,0.62);
+      --accent:#ffd34d;           /* amarillo "alerta/verificado" */
+      --accent-ink:#1a1400;
+      --ease:cubic-bezier(0.22,1,0.36,1);
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
+    body{
+      font-family:Inter,ui-sans-serif,system-ui,sans-serif;
+      color:var(--text);
+    }
+
+    /* Escenario vertical: tarjeta anclada en el tercio inferior-medio */
+    .stage{
+      position:absolute;inset:0;
+      display:flex;align-items:center;justify-content:center;
+      padding:0 64px;
+    }
+
+    .card{
+      position:relative;
+      width:100%;max-width:920px;
+      background:rgba(9,11,22,0.90);
+      backdrop-filter:blur(26px) saturate(1.2);
+      -webkit-backdrop-filter:blur(26px) saturate(1.2);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:28px;
+      padding:48px 52px 52px;
+      box-shadow:0 30px 90px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,211,77,0.06);
+      opacity:0;
+      transform:translateY(40px) scale(0.98);
+      filter:blur(8px);
+      transition:opacity .5s var(--ease), transform .5s var(--ease), filter .5s var(--ease);
+      pointer-events:none;
+    }
+    .card.show{opacity:1;transform:none;filter:blur(0);}
+
+    /* Rótulo CONTEXTO muy visible */
+    .kicker{
+      display:inline-flex;align-items:center;gap:12px;
+      font-size:30px;font-weight:900;letter-spacing:0.18em;
+      color:var(--accent-ink);background:var(--accent);
+      padding:10px 22px;border-radius:999px;
+      margin-bottom:28px;
+      box-shadow:0 8px 28px rgba(255,211,77,0.28);
+    }
+    .kicker .pulse{
+      width:14px;height:14px;border-radius:50%;background:var(--accent-ink);
+      animation:pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse{0%,100%{opacity:.35;transform:scale(.8);}50%{opacity:1;transform:scale(1.1);}}
+
+    .title{
+      font-size:58px;font-weight:800;line-height:1.08;
+      letter-spacing:-0.02em;margin-bottom:24px;
+    }
+    .context{
+      font-size:40px;font-weight:600;line-height:1.3;
+      color:var(--text);
+    }
+
+    /* Imagen opcional (Demo 1): se muestra arriba de la tarjeta si el slide la trae */
+    .media{
+      width:100%;max-width:920px;margin-bottom:26px;
+      border-radius:22px;overflow:hidden;
+      border:1px solid rgba(255,255,255,0.08);
+      background:rgba(0,0,0,0.25);
+      display:none;
+      opacity:0;transform:translateY(40px);filter:blur(8px);
+      transition:opacity .5s var(--ease), transform .5s var(--ease), filter .5s var(--ease);
+    }
+    .media.show{opacity:1;transform:none;filter:blur(0);}
+    .media img{display:block;width:100%;height:auto;}
+
+    /* Contador "Verificado X de N" */
+    .counter{
+      margin-top:34px;padding-top:26px;
+      border-top:1px solid rgba(255,255,255,0.10);
+      display:flex;align-items:center;gap:16px;
+      font-size:28px;font-weight:800;letter-spacing:0.04em;
+      color:var(--accent);
+    }
+    .counter .check{
+      font-size:30px;line-height:1;
+      filter:drop-shadow(0 2px 10px rgba(255,211,77,0.35));
+    }
+
+    .wrap-vert{
+      display:flex;flex-direction:column;align-items:center;
+      width:100%;max-width:920px;
+    }
+
+    /* Indicador de conexión discreto (esquina) — útil en pruebas, invisible-ish */
+    .conn{
+      position:absolute;top:22px;right:26px;
+      font-size:16px;font-weight:600;color:var(--muted);
+      display:flex;align-items:center;gap:8px;opacity:0.0;
+      transition:opacity .3s;
+    }
+    .conn.visible{opacity:0.8;}
+    .conn .dot{width:10px;height:10px;border-radius:50%;background:#e2554f;}
+    .conn.ok .dot{background:#39d98a;}
+  </style>
+</head>
+<body>
+  <div class="conn" id="conn"><span class="dot"></span><span id="connText">…</span></div>
+
+  <div class="stage">
+    <div class="wrap-vert">
+      <div class="media" id="media"><img id="mediaImg" alt="" /></div>
+      <div class="card" id="card">
+        <span class="kicker"><span class="pulse"></span><span id="kickerText">CONTEXTO</span></span>
+        <h1 class="title" id="title">—</h1>
+        <p class="context" id="context"></p>
+        <div class="counter" id="counter"><span class="check">✓</span><span id="counterText"></span></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const token   = q.get("token") || "";
+  const role    = q.get("role") || "overlay";
+  const defPkg  = q.get("pkg") || "3";
+  const muted   = q.get("mute") === "1";
+
+  const CONTENT = window.CONTEXT_MIC || {};
+
+  // ── WS URL (mismo host del overlay por defecto; permite override) ──
+  const wsBaseParam = q.get("wsBase");
+  const wsBase = wsBaseParam
+    ? wsBaseParam
+    : (location.protocol === "https:" ? "wss:" : "ws:") + "//" + location.host;
+  const WS_URL = wsBase +
+    (wsBase.includes("?") ? "&" : "?") + "role=" + encodeURIComponent(role) +
+    (token ? "&token=" + encodeURIComponent(token) : "");
+
+  // ── Elementos ──
+  const el = {
+    card: document.getElementById("card"),
+    media: document.getElementById("media"),
+    mediaImg: document.getElementById("mediaImg"),
+    title: document.getElementById("title"),
+    context: document.getElementById("context"),
+    counter: document.getElementById("counter"),
+    counterText: document.getElementById("counterText"),
+    kickerText: document.getElementById("kickerText"),
+    conn: document.getElementById("conn"),
+    connText: document.getElementById("connText"),
+  };
+
+  // ── Audio de alerta (Web Audio API, sin archivos externos) ──
+  let audioCtx = null;
+  function getCtx(){
+    if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    return audioCtx;
+  }
+  function playAlert(){
+    if(muted) return;
+    try{
+      const ctx = getCtx();
+      if(ctx.state === "suspended") ctx.resume();
+      const now = ctx.currentTime;
+      // Doble beep ascendente tipo "alerta/notificación"
+      [[880, 0.0], [1320, 0.12]].forEach(([freq, t]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "triangle";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, now + t);
+        gain.gain.exponentialRampToValueAtTime(0.5, now + t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.22);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + t);
+        osc.stop(now + t + 0.24);
+      });
+    }catch(e){ /* OBS a veces bloquea audio; no romper el overlay */ }
+  }
+
+  // ── Mostrar / ocultar tarjeta ──
+  let hideTimer = null;
+
+  function showSlide(pkgId, index){
+    const pkg = CONTENT[String(pkgId)];
+    if(!pkg || !Array.isArray(pkg.slides)) return;
+    const slide = pkg.slides[index];
+    if(!slide) return;
+
+    clearTimeout(hideTimer);
+
+    el.kickerText.textContent = "CONTEXTO";
+    el.title.textContent = slide.title || "";
+    el.context.textContent = slide.context || "";
+    el.context.style.display = slide.context ? "" : "none";
+    el.counterText.textContent = slide.cta || "";
+    el.counter.style.display = slide.cta ? "" : "none";
+
+    // Imagen opcional
+    if(slide.image){
+      el.mediaImg.src = slide.image;
+      el.media.style.display = "";
+      requestAnimationFrame(() => el.media.classList.add("show"));
+    } else {
+      el.media.classList.remove("show");
+      el.media.style.display = "none";
+      el.mediaImg.removeAttribute("src");
+    }
+
+    // Reaparición limpia si ya estaba visible
+    el.card.classList.remove("show");
+    requestAnimationFrame(() => requestAnimationFrame(() => el.card.classList.add("show")));
+
+    playAlert();
+  }
+
+  function hideCard(){
+    clearTimeout(hideTimer);
+    el.card.classList.remove("show");
+    el.media.classList.remove("show");
+    hideTimer = setTimeout(() => { el.media.style.display = "none"; }, 520);
+  }
+
+  // ── Conexión WebSocket (mismo patrón que overlay.html) ──
+  let ws = null, authFailed = false;
+  function setConn(ok, text){
+    el.conn.classList.toggle("ok", !!ok);
+    el.conn.classList.add("visible");
+    el.connText.textContent = text;
+    // Oculta el indicador tras conectar para no ensuciar la toma
+    if(ok){ setTimeout(() => el.conn.classList.remove("visible"), 1500); }
+  }
+
+  function connect(){
+    if(authFailed) return;
+    try{
+      if(ws) ws.close();
+      ws = new WebSocket(WS_URL);
+      setConn(false, "Conectando…");
+
+      ws.onopen = () => setConn(true, "Conectado");
+
+      ws.onclose = (ev) => {
+        if(ev.code === 1008){ authFailed = true; setConn(false, "Token inválido"); return; }
+        setConn(false, "Desconectado");
+        scheduleReconnect();
+      };
+      ws.onerror = () => { setConn(false, "Error"); if(!authFailed) scheduleReconnect(); };
+
+      ws.onmessage = (ev) => {
+        let evt; try{ evt = JSON.parse(ev.data); }catch{ return; }
+        if(!evt || typeof evt !== "object") return;
+        if(evt.type !== "contextcard") return;
+        if(evt.action === "hide"){ hideCard(); return; }
+        const pkgId = evt.pkg != null ? String(evt.pkg) : defPkg;
+        const index = Number(evt.index);
+        if(Number.isInteger(index)) showSlide(pkgId, index);
+      };
+    }catch(e){ setConn(false, "Fallo"); scheduleReconnect(); }
+  }
+  function scheduleReconnect(){
+    clearTimeout(scheduleReconnect._t);
+    scheduleReconnect._t = setTimeout(connect, 1500);
+  }
+
+  // Boot
+  setConn(false, "Desconectado");
+  connect();
+})();
+</script>
+</body>
+</html>

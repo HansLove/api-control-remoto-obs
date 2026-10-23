@@ -341,6 +341,19 @@
     </div>
   </div>
 
+  <!-- ═══ MICRÓFONO DE CONTEXTO (modo manual) ═══ -->
+  <div class="card">
+    <div class="card-title">🎤 Micrófono de Contexto</div>
+    <div class="grid2">
+      <button class="btn primary" data-ctx="0">Demo 1</button>
+      <button class="btn primary" data-ctx="1">Demo 2</button>
+      <button class="btn primary" data-ctx="2">Demo 3</button>
+      <button class="btn primary" data-ctx="3">Demo 4</button>
+    </div>
+    <button class="btn danger" id="ctxHide" style="width:100%;margin-top:10px;">✕ Ocultar tarjeta</button>
+    <div id="ctxStatus" class="status-line"></div>
+  </div>
+
   <!-- ═══ ZONA B: IA EN VIVO ═══ -->
   <div class="card card-ai">
     <div class="card-title">
@@ -860,6 +873,19 @@
     toast("Esc · Overlays ocultos");
   }
 
+  // ── Micrófono de Contexto (modo manual) ──
+  const CTX_PKG = "3"; // paquete activo del episodio (ver context-mic-content.js)
+  function sendContextCard(index) {
+    send({ type: "contextcard", pkg: CTX_PKG, index });
+    setStatusLine("ctxStatus", `Tarjeta ${index + 1} en pantalla`);
+    toast(`Demo ${index + 1}`);
+  }
+  function sendContextHide() {
+    send({ type: "contextcard", action: "hide" });
+    setStatusLine("ctxStatus", "");
+    toast("Tarjeta oculta");
+  }
+
   // ── Escenas CAOS ──
   function showScene(scene, params, statusMsg) {
     send({ type: "scene_show", scene, params, duration: 0 });
@@ -1223,6 +1249,12 @@
       setStatusLine("sceneStatus", "");
       toast("Escena oculta");
     });
+
+    // ── Micrófono de Contexto ──
+    document.querySelectorAll("[data-ctx]").forEach(btn => {
+      btn.addEventListener("click", () => sendContextCard(Number(btn.dataset.ctx)));
+    });
+    $("ctxHide")?.addEventListener("click", sendContextHide);
 
     // ── Reactions ──
     document.querySelectorAll("[data-trigger]").forEach(btn => {

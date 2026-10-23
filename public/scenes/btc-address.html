@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>CAOS · BTC Address</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/scenes/caos.css">
+<style>
+  /*
+    CAOS scene: BTC ADDRESS
+    Donation card with QR that appears and disappears in a loop.
+    Params:
+      ?every=60          seconds between appearances (hidden time)
+      &show=12           seconds visible
+      &delay=2           seconds before first appearance
+      &pos=br            br | bl | tr | tl | center
+      &scale=1           size multiplier
+      &title=Apoya el canal
+      &addr=bc1q...      override address
+      &accent=orange|green|blue|white
+  */
+  #card {
+    position: fixed;
+    display: flex; align-items: center; gap: 22px;
+    padding: 20px 26px 20px 20px;
+    border-radius: 22px;
+    background: var(--caos-ink);
+    border: 1px solid rgba(var(--accent-rgb), 0.45);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.03) inset,
+      0 20px 60px -20px rgba(0,0,0,0.8),
+      0 0 50px -10px rgba(var(--accent-rgb), 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    opacity: 0;
+    pointer-events: none;
+    transform-origin: var(--origin, bottom right);
+  }
+
+  body[data-pos="br"] #card { right: 48px; bottom: 48px; --origin: bottom right; }
+  body[data-pos="bl"] #card { left: 48px;  bottom: 48px; --origin: bottom left; }
+  body[data-pos="tr"] #card { right: 48px; top: 48px;    --origin: top right; }
+  body[data-pos="tl"] #card { left: 48px;  top: 48px;    --origin: top left; }
+  body[data-pos="center"] #card { left: 50%; top: 50%; translate: -50% -50%; --origin: center; }
+
+  #card.in  { animation: cardIn  0.9s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  #card.out { animation: cardOut 0.6s cubic-bezier(0.7, 0, 0.84, 0) both; }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: scale(var(--s)) translateY(40px) scale(0.9); filter: blur(12px); }
+    to   { opacity: 1; transform: scale(var(--s)) translateY(0) scale(1);     filter: blur(0); }
+  }
+  @keyframes cardOut {
+    from { opacity: 1; transform: scale(var(--s)) translateY(0) scale(1);     filter: blur(0); }
+    to   { opacity: 0; transform: scale(var(--s)) translateY(30px) scale(0.92); filter: blur(10px); }
+  }
+
+  #qrWrap {
+    position: relative;
+    width: 168px; height: 168px;
+    padding: 10px;
+    border-radius: 14px;
+    background: #fff;
+    flex-shrink: 0;
+    overflow: hidden;
+  }
+  #qrWrap img { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  #qrWrap::after {
+    content: '';
+    position: absolute; left: 0; right: 0; height: 30%;
+    background: linear-gradient(180deg, transparent, rgba(var(--accent-rgb), 0.35), transparent);
+    top: -30%;
+  }
+  #card.in #qrWrap::after { animation: scan 1.6s 0.6s ease-in-out 2; }
+  @keyframes scan { from { top: -30%; } to { top: 100%; } }
+
+  #info { display: flex; flex-direction: column; gap: 10px; max-width: 360px; }
+
+  #title {
+    font-weight: 800;
+    font-size: 26px;
+    letter-spacing: 0.01em;
+    color: var(--caos-white);
+  }
+  #title span { color: var(--accent); }
+
+  #label {
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+    color: var(--caos-muted);
+  }
+
+  #addr {
+    font-family: var(--caos-mono);
+    font-weight: 500;
+    font-size: 17px;
+    line-height: 1.45;
+    word-break: break-all;
+    color: var(--caos-white);
+  }
+  #addr .hl { color: var(--accent); font-weight: 700; }
+
+  #bar {
+    height: 3px; border-radius: 3px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  #bar i {
+    display: block; height: 100%; width: 100%;
+    background: linear-gradient(90deg, var(--accent), rgba(var(--accent-rgb), 0.4));
+    box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.8);
+    transform-origin: left;
+  }
+  #card.in #bar i { animation: drain var(--show) linear both; }
+  @keyframes drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+</style>
+</head>
+<body>
+<div id="card">
+  <div id="qrWrap">
+    <img id="qr" src="/scenes/btc-qr.png" alt="QR Bitcoin">
+  </div>
+  <div id="info">
+    <div id="title"></div>
+    <div id="label">Bitcoin · On-chain</div>
+    <div id="addr"></div>
+    <div id="bar"><i></i></div>
+  </div>
+</div>
+<script>
+  const P = new URLSearchParams(location.search);
+  const num = (k, d) => { const v = parseFloat(P.get(k)); return Number.isFinite(v) && v >= 0 ? v : d; };
+
+  const ADDR  = P.get('addr')  || 'bc1q6n0h05956f4hlnwdppptjh6aj8wemymyns7r5c';
+  const TITLE = P.get('title') || 'Apoya el canal con <span>₿</span>';
+  const EVERY = num('every', 60);
+  const SHOW  = num('show', 12);
+  const DELAY = num('delay', 2);
+
+  document.body.dataset.accent = P.get('accent') || 'orange';
+  document.body.dataset.pos = P.get('pos') || 'br';
+
+  const card = document.getElementById('card');
+  card.style.setProperty('--s', num('scale', 1));
+  card.style.setProperty('--show', SHOW + 's');
+
+  document.getElementById('title').innerHTML = TITLE;
+  // Highlight first and last 6 chars so viewers can verify the address
+  const a = ADDR;
+  document.getElementById('addr').innerHTML =
+    `<span class="hl">${a.slice(0, 6)}</span>${a.slice(6, -6)}<span class="hl">${a.slice(-6)}</span>`;
+
+  function show() {
+    card.classList.remove('out');
+    void card.offsetWidth;
+    card.classList.add('in');
+    setTimeout(hide, SHOW * 1000);
+  }
+  function hide() {
+    card.classList.remove('in');
+    card.classList.add('out');
+    setTimeout(show, EVERY * 1000);
+  }
+  setTimeout(show, DELAY * 1000);
+</script>
+</body>
+</html>
