@@ -420,6 +420,11 @@ app.get("/context", (req, res) => {
   if (!fs.existsSync(p)) return res.status(404).send("Missing public/context-mic-overlay.html");
   res.sendFile(p);
 });
+app.get("/collage", (req, res) => {
+  const p = path.join(PUBLIC_DIR, "collage-overlay.html");
+  if (!fs.existsSync(p)) return res.status(404).send("Missing public/collage-overlay.html");
+  res.sendFile(p);
+});
 
 // ---------- CAOS Visual Engine ----------
 // Stage: single OBS browser source that hosts all scenes dynamically

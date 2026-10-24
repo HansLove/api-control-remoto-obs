@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Collage Dinámico — 9:16</title>
+  <!--
+    OBS Browser Source: 1080 × 1920 (vertical 9:16), fondo transparente.
+
+    UNA sola pantalla que recibe TODO y lo compone como collage:
+      - IA en vivo (ai_response)       → teja de texto
+      - Gráfica IA (chart_data)        → teja con gráfica (Chart.js)
+      - Micrófono de Contexto (contextcard) → teja de contexto
+      - Escenas CAOS (keyword/metric/compare) → tejas
+
+    Lo más reciente = HERO grande arriba. Lo anterior se ENCOGE a la franja
+    de abajo (máx 3 anteriores). La más vieja se retira con fade.
+
+    URL:   /collage?token=TU_TOKEN
+    Params: ?mute=1 (sin sonido)  ?bg=1 (fondo oscuro para uso a pantalla completa)
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&family=JetBrains+Mono:wght@700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <script src="context-mic-content.js"></script>
+  <style>
+    :root{
+      --text:#eaf1ff;
+      --muted:rgba(200,214,245,0.60);
+      --ai:#22d3ee;
+      --chart:#e879f9;
+      --context:#ffd34d;
+      --keyword:#8b5cf6;
+      --metric:#34d399;
+      --ease:cubic-bezier(.22,1,.36,1);
+    }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html,body{width:100%;height:100%;overflow:hidden;background:transparent;}
+    body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:var(--text);}
+    body.bg{
+      background:
+        radial-gradient(1200px 900px at 20% 10%, rgba(139,92,246,0.18), transparent 60%),
+        radial-gradient(1000px 800px at 85% 90%, rgba(34,211,238,0.16), transparent 60%),
+        #05060d;
+    }
+
+    .stage{
+      position:absolute;inset:0;
+      display:flex;flex-direction:column;gap:30px;
+      padding:54px;
+    }
+    .hero{flex:1 1 auto;min-height:0;position:relative;display:flex;}
+    .strip{flex:0 0 360px;display:flex;gap:26px;}
+    .strip.empty{display:none;}
+    .strip > .tile{flex:1 1 0;min-width:0;}
+
+    /* ── Teja base (glass + neón) ── */
+    .tile{
+      position:relative;overflow:hidden;
+      width:100%;height:100%;
+      display:flex;flex-direction:column;justify-content:center;
+      background:linear-gradient(160deg, rgba(15,18,34,0.92), rgba(9,11,22,0.94));
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:26px;
+      padding:40px 44px;
+      box-shadow:0 24px 70px rgba(0,0,0,0.55);
+    }
+    .tile::before{ /* halo neón del color del tipo */
+      content:'';position:absolute;inset:-1px;border-radius:26px;pointer-events:none;
+      box-shadow:inset 0 0 0 1.5px var(--accent, rgba(255,255,255,.1)),
+                 0 0 42px -6px var(--accent, transparent);
+      opacity:.55;
+    }
+    .tile::after{ /* barrido de brillo diagonal */
+      content:'';position:absolute;top:-60%;left:-30%;width:40%;height:220%;
+      background:linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+      transform:rotate(12deg);pointer-events:none;
+      animation:sheen 7s ease-in-out infinite;
+    }
+    @keyframes sheen{0%{left:-40%;}60%,100%{left:130%;}}
+
+    .tile-ai{--accent:var(--ai);}
+    .tile-chart{--accent:var(--chart);}
+    .tile-context{--accent:var(--context);}
+    .tile-keyword{--accent:var(--keyword);}
+    .tile-metric{--accent:var(--metric);}
+
+    /* entrada */
+    @keyframes enter{from{opacity:0;transform:translateY(46px) scale(.96);filter:blur(10px);}to{opacity:1;transform:none;filter:blur(0);}}
+    .tile.enter{animation:enter .55s var(--ease) both;}
+
+    /* ── Badge ── */
+    .badge{
+      align-self:flex-start;display:inline-flex;align-items:center;gap:10px;
+      font-weight:900;letter-spacing:.16em;text-transform:uppercase;
+      color:#07080f;background:var(--accent);
+      padding:8px 18px;border-radius:999px;margin-bottom:22px;
+      box-shadow:0 8px 26px -6px var(--accent);
+    }
+    .badge .d{width:11px;height:11px;border-radius:50%;background:#07080f;animation:pulse 1.4s ease-in-out infinite;}
+    @keyframes pulse{0%,100%{opacity:.35;transform:scale(.8);}50%{opacity:1;transform:scale(1.1);}}
+
+    /* ── Tipografía por tipo (HERO) ── */
+    .ai-q{font-size:26px;font-weight:600;color:var(--muted);margin-bottom:14px;}
+    .ai-a{font-size:46px;font-weight:800;line-height:1.14;letter-spacing:-.01em;}
+
+    .ctx-t{font-size:52px;font-weight:800;line-height:1.08;letter-spacing:-.02em;margin-bottom:18px;}
+    .ctx-c{font-size:34px;font-weight:600;line-height:1.3;color:var(--text);}
+    .ctx-count{margin-top:22px;font-size:28px;font-weight:800;color:var(--accent);display:flex;gap:12px;align-items:center;}
+
+    .kw{font-size:128px;font-weight:900;line-height:.98;letter-spacing:-.03em;
+        background:linear-gradient(180deg,#fff,#c7b6ff);-webkit-background-clip:text;background-clip:text;color:transparent;
+        text-shadow:0 0 40px rgba(139,92,246,.35);word-break:break-word;}
+    .kw-sub{margin-top:16px;font-size:30px;font-weight:600;color:var(--muted);letter-spacing:.04em;}
+
+    .m-label{font-size:30px;font-weight:600;color:var(--muted);margin-bottom:10px;}
+    .m-val{font-family:'JetBrains Mono',monospace;font-size:132px;font-weight:800;line-height:1;letter-spacing:-.02em;
+           background:linear-gradient(180deg,#eafff6,#34d399);-webkit-background-clip:text;background-clip:text;color:transparent;}
+
+    .ch-title{font-size:38px;font-weight:800;letter-spacing:-.01em;margin-bottom:6px;}
+    .ch-sub{font-size:22px;font-weight:600;color:var(--muted);margin-bottom:16px;}
+    .ch-canvas{position:relative;flex:1 1 auto;min-height:0;}
+
+    .thinking{display:flex;align-items:center;gap:16px;font-size:30px;font-weight:700;color:var(--muted);}
+    .spinner{width:34px;height:34px;border-radius:50%;border:4px solid rgba(255,255,255,.14);border-top-color:var(--accent);animation:spin 1s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+
+    /* ── Reglas de ENCOGIDO (thumbs) ── */
+    .tile.is-thumb{padding:22px 24px;border-radius:20px;}
+    .tile.is-thumb .badge{font-size:13px;padding:5px 12px;margin-bottom:12px;}
+    .tile.is-thumb .ai-q{display:none;}
+    .tile.is-thumb .ai-a{font-size:22px;-webkit-line-clamp:4;}
+    .tile.is-thumb .ctx-t{font-size:24px;margin-bottom:8px;-webkit-line-clamp:3;}
+    .tile.is-thumb .ctx-c{display:none;}
+    .tile.is-thumb .ctx-count{font-size:15px;margin-top:12px;}
+    .tile.is-thumb .kw{font-size:46px;}
+    .tile.is-thumb .kw-sub{display:none;}
+    .tile.is-thumb .m-label{font-size:15px;margin-bottom:4px;}
+    .tile.is-thumb .m-val{font-size:54px;}
+    .tile.is-thumb .ch-title{font-size:18px;margin-bottom:2px;}
+    .tile.is-thumb .ch-sub{display:none;}
+    .tile.is-thumb .thinking{font-size:16px;}
+    .tile.is-thumb .spinner{width:20px;height:20px;border-width:3px;}
+
+    /* clamp multilinea para textos largos */
+    .ai-a,.ctx-t{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;}
+    .is-hero .ai-a{-webkit-line-clamp:7;}
+    .is-hero .ctx-t{-webkit-line-clamp:4;}
+    .ctx-c{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden;}
+
+    /* indicador de conexión */
+    .conn{position:absolute;top:26px;right:30px;display:flex;align-items:center;gap:9px;
+          font-size:16px;font-weight:700;color:var(--muted);opacity:0;transition:opacity .3s;}
+    .conn.visible{opacity:.85;}
+    .conn .dot{width:10px;height:10px;border-radius:50%;background:#e2554f;}
+    .conn.ok .dot{background:#39d98a;}
+  </style>
+</head>
+<body>
+  <div class="conn" id="conn"><span class="dot"></span><span id="connText">…</span></div>
+  <div class="stage">
+    <div class="hero" id="hero"></div>
+    <div class="strip empty" id="strip"></div>
+  </div>
+
+<script>
+(() => {
+  const q = new URLSearchParams(location.search);
+  const token = q.get("token") || "";
+  const role  = q.get("role") || "overlay";
+  const muted = q.get("mute") === "1";
+  if(q.get("bg") === "1") document.body.classList.add("bg");
+
+  const MAX = 4; // 1 hero + 3 thumbs
+  const heroEl = document.getElementById("hero");
+  const stripEl = document.getElementById("strip");
+  const connEl = document.getElementById("conn");
+  const connText = document.getElementById("connText");
+
+  const THEMES = {
+    neon:   ["#22d3ee","#a78bfa","#f472b6","#34d399","#fbbf24","#60a5fa","#f87171"],
+    ocean:  ["#38bdf8","#22d3ee","#2dd4bf","#60a5fa","#818cf8","#06b6d4","#0ea5e9"],
+    fire:   ["#fb7185","#f97316","#fbbf24","#ef4444","#f59e0b","#f43f5e","#fca5a5"],
+    emerald:["#34d399","#10b981","#6ee7b7","#059669","#a7f3d0","#2dd4bf","#14b8a6"],
+    gold:   ["#fbbf24","#f59e0b","#fcd34d","#d97706","#fde68a","#eab308","#ca8a04"],
+  };
+
+  const esc = (s) => { const d=document.createElement("div"); d.textContent = s==null?"":String(s); return d.innerHTML; };
+
+  // ── Audio de alerta (Web Audio, sin archivos) ──
+  let actx=null;
+  function alertSound(){
+    if(muted) return;
+    try{
+      actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+      if(actx.state==="suspended") actx.resume();
+      const now=actx.currentTime;
+      [[740,0],[1180,0.11]].forEach(([f,t])=>{
+        const o=actx.createOscillator(), g=actx.createGain();
+        o.type="triangle"; o.frequency.value=f;
+        g.gain.setValueAtTime(0.0001, now+t);
+        g.gain.exponentialRampToValueAtTime(0.45, now+t+0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, now+t+0.2);
+        o.connect(g).connect(actx.destination); o.start(now+t); o.stop(now+t+0.22);
+      });
+    }catch(e){}
+  }
+
+  // ── Estado de tejas ──
+  let seq = 0;
+  const tiles = []; // {id, type, data, el, chart}, newest first
+
+  function slideFromContext(pkg, index){
+    const p = (window.CONTEXT_MIC||{})[String(pkg)];
+    return (p && Array.isArray(p.slides)) ? p.slides[index] : null;
+  }
+
+  // ── Render del contenido de una teja ──
+  function contentHTML(t){
+    const d = t.data || {};
+    if(t.type==="ai"){
+      if(d.state==="thinking")
+        return `<span class="badge"><span class="d"></span>IA</span><div class="thinking"><span class="spinner"></span>Pensando…</div>`;
+      return `<span class="badge"><span class="d"></span>IA</span>`+
+             (d.question?`<div class="ai-q">${esc(d.question)}</div>`:``)+
+             `<div class="ai-a">${esc(d.answer||"")}</div>`;
+    }
+    if(t.type==="context"){
+      return `<span class="badge"><span class="d"></span>Contexto</span>`+
+             `<div class="ctx-t">${esc(d.title||"")}</div>`+
+             (d.context?`<div class="ctx-c">${esc(d.context)}</div>`:``)+
+             (d.cta?`<div class="ctx-count"><span>✓</span><span>${esc(d.cta)}</span></div>`:``);
+    }
+    if(t.type==="keyword"){
+      return `<div class="kw">${esc(d.text||"")}</div>`+(d.sub?`<div class="kw-sub">${esc(d.sub)}</div>`:``);
+    }
+    if(t.type==="metric"){
+      const val = `${esc(d.prefix||"")}${esc(d.value||"")}${esc(d.suffix||"")}`;
+      return (d.label?`<div class="m-label">${esc(d.label)}</div>`:``)+`<div class="m-val">${val}</div>`;
+    }
+    if(t.type==="chart"){
+      if(d.state==="thinking")
+        return `<span class="badge"><span class="d"></span>Gráfica</span><div class="thinking"><span class="spinner"></span>${esc(d.topic||"Generando…")}</div>`;
+      if(d.state==="error")
+        return `<span class="badge"><span class="d"></span>Gráfica</span><div class="thinking">${esc(d.message||"Error")}</div>`;
+      return `<div class="ch-title">${esc(d.title||"")}</div>`+
+             (d.subtitle?`<div class="ch-sub">${esc(d.subtitle)}</div>`:``)+
+             `<div class="ch-canvas"><canvas></canvas></div>`;
+    }
+    return "";
+  }
+
+  function render(t){
+    if(t.chart){ t.chart.destroy(); t.chart=null; }
+    t.el.innerHTML = contentHTML(t);
+    if(t.type==="chart" && t.data && !t.data.state){ initChart(t); }
+  }
+
+  function initChart(t){
+    if(!window.Chart){ return setTimeout(()=>initChart(t), 150); }
+    const d = t.data;
+    const canvas = t.el.querySelector("canvas");
+    if(!canvas) return;
+    const palette = THEMES[d.theme] || THEMES.neon;
+    const labels = d.labels||[], values = (d.values||[]).map(Number);
+    const isHbar = d.chart_type==="horizontalBar";
+    const isLine = d.chart_type==="line";
+    let colors;
+    if(d.highlight){
+      colors = labels.map(l => l===d.highlight ? palette[0] : "rgba(255,255,255,0.22)");
+    } else {
+      colors = labels.map((_,i)=>palette[i%palette.length]);
+    }
+    const common = { color:"#9fb0d0", font:{family:"Inter"} };
+    t.chart = new Chart(canvas.getContext("2d"), {
+      type: isLine ? "line" : "bar",
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: isLine ? "rgba(34,211,238,0.12)" : colors,
+          borderColor: isLine ? palette[0] : colors,
+          borderWidth: isLine ? 3 : 0,
+          borderRadius: 10, borderSkipped:false,
+          fill: isLine, tension:.35,
+          pointRadius: isLine ? 3 : 0,
+          pointBackgroundColor: palette[0],
+        }]
+      },
+      options: {
+        indexAxis: isHbar ? "y" : "x",
+        responsive:true, maintainAspectRatio:false,
+        animation:{duration:800, easing:"easeOutQuart"},
+        layout:{padding:{top:4,right:10,bottom:2,left:2}},
+        plugins:{ legend:{display:false}, tooltip:{enabled:false} },
+        scales:{
+          x:{ ticks:{...common}, grid:{color:"rgba(255,255,255,0.06)"}, border:{display:false} },
+          y:{ ticks:{color:"#cdd8f0", font:{family:"Inter",weight:"600"}}, grid:{color:"rgba(255,255,255,0.06)"}, border:{display:false} }
+        }
+      }
+    });
+  }
+
+  // ── Layout con FLIP (encoger/mover suave) ──
+  function relayout(){
+    const nodes = tiles.map(t=>t.el);
+    const first = new Map();
+    nodes.forEach(n=>{ if(n.isConnected) first.set(n, n.getBoundingClientRect()); });
+
+    heroEl.innerHTML=""; stripEl.innerHTML="";
+    tiles.forEach((t,i)=>{
+      t.el.classList.toggle("is-hero", i===0);
+      t.el.classList.toggle("is-thumb", i>0);
+      (i===0?heroEl:stripEl).appendChild(t.el);
+    });
+    stripEl.classList.toggle("empty", tiles.length<=1);
+
+    nodes.forEach(n=>{
+      const f = first.get(n); if(!f) return;
+      const l = n.getBoundingClientRect();
+      const dx=f.left-l.left, dy=f.top-l.top;
+      const sx=f.width/Math.max(1,l.width), sy=f.height/Math.max(1,l.height);
+      if(Math.abs(dx)<1 && Math.abs(dy)<1 && Math.abs(sx-1)<0.01 && Math.abs(sy-1)<0.01) return;
+      n.style.transformOrigin="top left";
+      n.style.transition="none";
+      n.style.transform=`translate(${dx}px,${dy}px) scale(${sx},${sy})`;
+      requestAnimationFrame(()=>requestAnimationFrame(()=>{
+        n.style.transition="transform .6s var(--ease)";
+        n.style.transform="";
+      }));
+    });
+    setTimeout(()=>tiles.forEach(t=>{ if(t.chart) t.chart.resize(); }), 640);
+  }
+
+  function retire(t){
+    const r = t.el.getBoundingClientRect();
+    const n = t.el;
+    Object.assign(n.style,{position:"fixed",left:r.left+"px",top:r.top+"px",width:r.width+"px",height:r.height+"px",margin:"0",zIndex:5});
+    requestAnimationFrame(()=>{
+      n.style.transition="opacity .45s var(--ease), transform .45s var(--ease)";
+      n.style.opacity="0"; n.style.transform="scale(.92) translateY(14px)";
+    });
+    setTimeout(()=>{ if(t.chart) t.chart.destroy(); n.remove(); }, 470);
+  }
+
+  function addTile(type, data){
+    const el = document.createElement("div");
+    el.className = "tile tile-"+type;
+    const t = { id:++seq, type, data, el, chart:null, pending:false };
+    tiles.unshift(t);
+    while(tiles.length>MAX) retire(tiles.pop());
+    relayout();
+    render(t);
+    el.classList.add("enter");
+    el.addEventListener("animationend", ()=>el.classList.remove("enter"), {once:true});
+    alertSound();
+    return t;
+  }
+
+  function latest(type){ return tiles.find(t=>t.type===type); }
+  function removeType(type){
+    for(let i=tiles.length-1;i>=0;i--){ if(tiles[i].type===type){ retire(tiles[i]); tiles.splice(i,1); } }
+    relayout();
+  }
+
+  // upsert para IA y Gráfica (thinking → resultado en la MISMA teja)
+  function upsert(type, data){
+    let t = tiles.find(x=>x.type===type && x.pending);
+    if(!t && data.state!=="thinking") t = latest(type);
+    if(t){ t.data = { ...t.data, ...data }; t.pending = (data.state==="thinking"); render(t); setTimeout(()=>{ if(t.chart) t.chart.resize(); }, 50); }
+    else { const nt = addTile(type, data); nt.pending = (data.state==="thinking"); }
+  }
+
+  // ── Dispatch WS ──
+  function handle(evt){
+    switch(evt.type){
+      case "ai_thinking":  upsert("ai", {state:"thinking", question:evt.question}); break;
+      case "ai_response":  upsert("ai", {state:null, question:evt.question, answer:evt.answer}); break;
+      case "ai_hide":      removeType("ai"); break;
+
+      case "chart_thinking": upsert("chart", {state:"thinking", topic:evt.topic}); break;
+      case "chart_data":     upsert("chart", {state:null, title:evt.title, subtitle:evt.subtitle, labels:evt.labels, values:evt.values, unit:evt.unit, chart_type:evt.chart_type, theme:evt.theme}); break;
+      case "chart_error":    upsert("chart", {state:"error", message:evt.message}); break;
+      case "chart_hide":     removeType("chart"); break;
+
+      case "contextcard":
+        if(evt.action==="hide"){ removeType("context"); }
+        else { const s = slideFromContext(evt.pkg!=null?evt.pkg:"3", Number(evt.index)); if(s) addTile("context", s); }
+        break;
+
+      case "scene_show": {
+        const p = evt.params||{};
+        if(evt.scene==="keyword")        addTile("keyword", {text:p.text, sub:p.sub});
+        else if(evt.scene==="key-metric")addTile("metric",  {value:p.value, prefix:p.prefix, suffix:p.suffix, label:p.label});
+        else if(evt.scene==="bar-compare"){
+          const items = String(p.items||"").split(",").map(s=>s.split(":")).filter(a=>a.length>=2);
+          addTile("chart", { state:null, title:p.title||"Comparación", labels:items.map(a=>a[0].trim()),
+            values:items.map(a=>parseFloat(a[1])||0), unit:p.unit||"", chart_type:"horizontalBar", theme:"neon", highlight:p.highlight||"" });
+        }
+        break;
+      }
+      case "scene_hide": removeType("keyword"); removeType("metric"); removeType("chart"); break;
+    }
+  }
+
+  // ── Conexión ──
+  const wsBase = (location.protocol==="https:"?"wss:":"ws:")+"//"+location.host;
+  const WS_URL = wsBase + "?role="+encodeURIComponent(role) + (token?"&token="+encodeURIComponent(token):"");
+  let ws=null, authFailed=false;
+  function setConn(ok,text){ connEl.classList.toggle("ok",!!ok); connEl.classList.add("visible"); connText.textContent=text; if(ok) setTimeout(()=>connEl.classList.remove("visible"),1500); }
+  function connect(){
+    if(authFailed) return;
+    try{
+      if(ws) ws.close();
+      ws = new WebSocket(WS_URL);
+      setConn(false,"Conectando…");
+      ws.onopen = ()=> setConn(true,"Conectado");
+      ws.onclose = (ev)=>{ if(ev.code===1008){authFailed=true;setConn(false,"Token inválido");return;} setConn(false,"Desconectado"); reconnect(); };
+      ws.onerror = ()=>{ setConn(false,"Error"); if(!authFailed) reconnect(); };
+      ws.onmessage = (ev)=>{ let evt; try{evt=JSON.parse(ev.data);}catch{return;} if(!evt||!evt.type) return; if(["ack","hello","presence"].includes(evt.type)) return; handle(evt); };
+    }catch(e){ setConn(false,"Fallo"); reconnect(); }
+  }
+  function reconnect(){ clearTimeout(reconnect._t); reconnect._t=setTimeout(connect,1500); }
+
+  window.addEventListener("resize", ()=>tiles.forEach(t=>{ if(t.chart) t.chart.resize(); }));
+  setConn(false,"Desconectado");
+  connect();
+})();
+</script>
+</body>
+</html>
