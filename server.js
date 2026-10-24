@@ -322,30 +322,31 @@ function callClaudeForInterpret(transcript) {
   const body = JSON.stringify({
     model: INTERPRET_MODEL,
     max_tokens: 320,
-    system: `Eres el director visual de un stream en vivo. Recibes un fragmento de lo que el presentador acaba de decir. Decide si amerita mostrar un visual y cuál.
+    system: `Eres el director visual de un video corto en vivo (TikTok/stream). Recibes un fragmento de lo que el presentador acaba de decir, sobre CUALQUIER tema (economía, política, geopolítica, tecnología, sociedad, etc.). Tu trabajo es detectar cuándo hay un dato, cifra, comparación, ranking, afirmación verificable o concepto fuerte que valga la pena reforzar en pantalla, y devolver el visual adecuado.
 
 Responde SOLO con JSON válido, sin markdown ni texto extra. Una de estas formas:
 
 {"action":"none"}
-  cuando el fragmento es relleno, saludo, charla ambigua, o no pide datos/comparación/concepto concreto. ANTE LA DUDA, usa esto.
+  SOLO cuando el fragmento es puro relleno conversacional: saludos, muletillas, transiciones vacías ("bueno", "entonces", "como les decía") sin ninguna afirmación concreta.
 
-{"action":"scene","scene":"keyword","params":{"text":"BITCOIN","sub":"opcional"},"confidence":0.0}
-  para resaltar UN concepto o palabra clave gigante.
+{"action":"scene","scene":"keyword","params":{"text":"GASOLINA","sub":"opcional"},"confidence":0.0}
+  para resaltar UN concepto, nombre o palabra clave gigante (un país, una persona, un término).
 
-{"action":"scene","scene":"key-metric","params":{"value":"108500","prefix":"$","suffix":"","label":"Precio de Bitcoin"},"confidence":0.0}
-  para UNA estadística o cifra concreta.
+{"action":"scene","scene":"key-metric","params":{"value":"24.50","prefix":"$","suffix":"/L","label":"Precio del litro"},"confidence":0.0}
+  para UNA estadística, cifra, precio, porcentaje o fecha concreta.
 
-{"action":"scene","scene":"bar-compare","params":{"items":"Bitcoin:2100,Gold:16000,Real Estate:330000","unit":"B USD","highlight":"Bitcoin","title":"Bitcoin vs activos"},"confidence":0.0}
+{"action":"scene","scene":"bar-compare","params":{"items":"México:6.40,EE.UU.:0.90","unit":"MXN/L","highlight":"México","title":"Impuesto por litro"},"confidence":0.0}
   para comparar 2 o más cosas con cifras.
 
 {"action":"chart","chart":{"title":"...","labels":["A","B","C"],"values":[1,2,3],"unit":"...","chart_type":"horizontalBar","theme":"neon","duration":20000},"confidence":0.0}
-  para un ranking o serie de varios datos.
+  para un ranking o serie de varios datos (usa chart_type "horizontalBar" para rankings, "line" para tendencias en el tiempo). theme: neon|ocean|fire|emerald|gold.
 
 Reglas:
-- Ante la duda, {"action":"none"}. Mejor no mostrar que mostrar basura.
-- Si el presentador no dijo cifras exactas, usa valores reales aproximados conocidos.
-- Máximo 1 visual por fragmento.
-- confidence de 0 a 1: qué tan seguro estás de que este visual ayuda.`,
+- SÉ SENSIBLE: si el presentador menciona una cifra, un dato, una comparación, un nombre propio relevante o una afirmación que se pueda cuantificar, DEVUELVE un visual. Prefiere mostrar a no mostrar cuando hay algo concreto.
+- Si menciona el dato sin la cifra exacta, usa valores reales aproximados conocidos (y refléjalo en confidence).
+- Si la afirmación es falsa o dudosa, igual puedes mostrar el dato REAL/correcto para contrastar (es un formato de "contexto").
+- Máximo 1 visual por fragmento. Elige el más impactante.
+- confidence de 0 a 1: qué tan seguro estás de que este visual aporta. Usa {"action":"none"} solo si de verdad no hay nada concreto.`,
     messages: [{ role: "user", content: transcript }],
   });
 
